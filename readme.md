@@ -20,3 +20,29 @@ This repository does not give access to the full software. It is meant as backup
   - Primary and secondary chains generation
   - Buffer calculation and scheduling
 - Project progress tracking through fever charts
+
+## NEW: Interactive Web Canvas
+
+This repository now includes a modern **web-based interactive canvas** that brings Critical Chain Project Management to your browser!
+
+### Quick Start
+Simply open `index.html` in your web browser - no installation required!
+
+### Features
+- **Interactive GANTT Chart** with HTML5 Canvas rendering
+- **Visual Task Management** with drag-and-drop support
+- **Real-time Critical Chain Visualization**
+- **Resource Management** with conflict detection
+- **Buffer Visualization** following CCPM methodology
+- **Zoom Controls** for better project viewing
+- **Click-to-view Task Details** for comprehensive information
+- **Example Project** to get started quickly
+
+### Learn More
+See [INTERACTIVE_CANVAS.md](INTERACTIVE_CANVAS.md) for detailed documentation, usage guide, and examples.
+
+### Technologies
+- Pure HTML5, CSS3, and JavaScript
+- No frameworks or dependencies required
+- Works in all modern browsers
+- Fully responsive design

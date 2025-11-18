@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical Chain Simulator - Interactive Canvas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Critical Chain Project Management Simulator</h1>
+            <p>Interactive visual planning and scheduling tool</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Control Panel -->
+            <aside class="control-panel">
+                <section class="panel-section">
+                    <h2>Resources</h2>
+                    <div id="resourceList" class="list-container"></div>
+                    <div class="input-group">
+                        <input type="text" id="resourceName" placeholder="Resource name">
+                        <button onclick="addResource()" class="btn btn-primary">Add Resource</button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h2>Tasks</h2>
+                    <div id="taskList" class="list-container"></div>
+                    <div class="input-group">
+                        <input type="text" id="taskName" placeholder="Task name">
+                        <input type="number" id="taskDuration" placeholder="Days" min="1" value="5">
+                        <select id="taskResource">
+                            <option value="">Select resource</option>
+                        </select>
+                        <input type="text" id="taskPredecessors" placeholder="Predecessors (e.g., 1,2)">
+                        <button onclick="addTask()" class="btn btn-primary">Add Task</button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h2>View Options</h2>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showCriticalChain" checked onchange="render()">
+                        Show Critical Chain
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showBuffers" checked onchange="render()">
+                        Show Buffers
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showResourceConflicts" checked onchange="render()">
+                        Highlight Resource Conflicts
+                    </label>
+                    <button onclick="calculateSchedule()" class="btn btn-success">Calculate Schedule</button>
+                    <button onclick="clearAll()" class="btn btn-danger">Clear All</button>
+                    <button onclick="loadExample()" class="btn btn-secondary">Load Example</button>
+                </section>
+
+                <section class="panel-section">
+                    <h2>Project Info</h2>
+                    <div id="projectInfo" class="info-box">
+                        <p>Total Tasks: <span id="totalTasks">0</span></p>
+                        <p>Total Resources: <span id="totalResources">0</span></p>
+                        <p>Project Duration: <span id="projectDuration">0</span> days</p>
+                        <p>Critical Chain Length: <span id="criticalChainLength">0</span> tasks</p>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Canvas Area -->
+            <main class="canvas-container">
+                <div class="canvas-header">
+                    <h2>GANTT Chart View</h2>
+                    <div class="zoom-controls">
+                        <button onclick="zoomIn()" class="btn btn-small">+</button>
+                        <button onclick="zoomOut()" class="btn btn-small">-</button>
+                        <button onclick="resetZoom()" class="btn btn-small">Reset</button>
+                    </div>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="ganttCanvas"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #4CAF50;"></span>
+                        <span>Regular Task</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #FF5722;"></span>
+                        <span>Critical Chain</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #FFC107;"></span>
+                        <span>Buffer</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #2196F3;"></span>
+                        <span>Selected Task</span>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Task Detail Modal -->
+        <div id="taskModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeTaskModal()">&times;</span>
+                <h2>Task Details</h2>
+                <div id="taskDetails"></div>
+                <button onclick="closeTaskModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
