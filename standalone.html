@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical Chain Simulator - Interactive Canvas</title>
+    <style>
+/* Critical Chain Simulator - Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f2f5;
+    color: #333;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Header */
+header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 30px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+    font-size: 24px;
+    margin-bottom: 5px;
+}
+
+header p {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* Main Content */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Control Panel */
+.control-panel {
+    width: 350px;
+    background: white;
+    border-right: 1px solid #ddd;
+    overflow-y: auto;
+    padding: 20px;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+}
+
+.panel-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.panel-section:last-child {
+    border-bottom: none;
+}
+
+.panel-section h2 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* Lists */
+.list-container {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+.list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #f5f5f5;
+    transition: background-color 0.2s;
+}
+
+.list-item:hover {
+    background-color: #f9f9f9;
+}
+
+.list-item:last-child {
+    border-bottom: none;
+}
+
+.task-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.task-item-content strong {
+    color: #333;
+    font-size: 14px;
+}
+
+.task-item-content small {
+    color: #666;
+    font-size: 11px;
+}
+
+/* Input Groups */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input-group input,
+.input-group select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: border-color 0.2s;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.input-group input[type="number"] {
+    width: 100%;
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5568d3;
+}
+
+.btn-success {
+    background: #4CAF50;
+    color: white;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.btn-success:hover {
+    background: #45a049;
+}
+
+.btn-danger {
+    background: #f44336;
+    color: white;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.btn-danger:hover {
+    background: #da190b;
+}
+
+.btn-secondary {
+    background: #757575;
+    color: white;
+    width: 100%;
+}
+
+.btn-secondary:hover {
+    background: #616161;
+}
+
+.btn-small {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.btn-remove {
+    background: #ff5722;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-remove:hover {
+    background: #e64a19;
+    transform: scale(1.1);
+}
+
+/* Checkbox */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* Info Box */
+.info-box {
+    background: #f5f7fa;
+    padding: 15px;
+    border-radius: 4px;
+    border-left: 4px solid #667eea;
+}
+
+.info-box p {
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #555;
+}
+
+.info-box p:last-child {
+    margin-bottom: 0;
+}
+
+.info-box span {
+    font-weight: 600;
+    color: #333;
+}
+
+/* Canvas Container */
+.canvas-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    overflow: hidden;
+}
+
+.canvas-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #f9f9f9;
+    border-bottom: 1px solid #ddd;
+}
+
+.canvas-header h2 {
+    font-size: 18px;
+    color: #333;
+}
+
+.zoom-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.canvas-wrapper {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+#ganttCanvas {
+    display: block;
+    cursor: default;
+}
+
+/* Legend */
+.legend {
+    display: flex;
+    gap: 20px;
+    padding: 10px 20px;
+    background: #f9f9f9;
+    border-top: 1px solid #ddd;
+    font-size: 12px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-color {
+    width: 20px;
+    height: 14px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    color: #667eea;
+}
+
+.modal-content p {
+    margin-bottom: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+}
+
+/* Scrollbar Styling */
+.list-container::-webkit-scrollbar,
+.control-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.list-container::-webkit-scrollbar-track,
+.control-panel::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.list-container::-webkit-scrollbar-thumb,
+.control-panel::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.list-container::-webkit-scrollbar-thumb:hover,
+.control-panel::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .control-panel {
+        width: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column;
+    }
+
+    .control-panel {
+        width: 100%;
+        max-height: 300px;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .canvas-container {
+        height: calc(100vh - 400px);
+    }
+
+    .legend {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Critical Chain Project Management Simulator</h1>
+            <p>Interactive visual planning and scheduling tool</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Control Panel -->
+            <aside class="control-panel">
+                <section class="panel-section">
+                    <h2>Resources</h2>
+                    <div id="resourceList" class="list-container"></div>
+                    <div class="input-group">
+                        <input type="text" id="resourceName" placeholder="Resource name">
+                        <button onclick="addResource()" class="btn btn-primary">Add Resource</button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h2>Tasks</h2>
+                    <div id="taskList" class="list-container"></div>
+                    <div class="input-group">
+                        <input type="text" id="taskName" placeholder="Task name">
+                        <input type="number" id="taskDuration" placeholder="Days" min="1" value="5">
+                        <select id="taskResource">
+                            <option value="">Select resource</option>
+                        </select>
+                        <input type="text" id="taskPredecessors" placeholder="Predecessors (e.g., 1,2)">
+                        <button onclick="addTask()" class="btn btn-primary">Add Task</button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h2>View Options</h2>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showCriticalChain" checked onchange="render()">
+                        Show Critical Chain
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showBuffers" checked onchange="render()">
+                        Show Buffers
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showResourceConflicts" checked onchange="render()">
+                        Highlight Resource Conflicts
+                    </label>
+                    <button onclick="calculateSchedule()" class="btn btn-success">Calculate Schedule</button>
+                    <button onclick="clearAll()" class="btn btn-danger">Clear All</button>
+                    <button onclick="loadExample()" class="btn btn-secondary">Load Example</button>
+                </section>
+
+                <section class="panel-section">
+                    <h2>Project Info</h2>
+                    <div id="projectInfo" class="info-box">
+                        <p>Total Tasks: <span id="totalTasks">0</span></p>
+                        <p>Total Resources: <span id="totalResources">0</span></p>
+                        <p>Project Duration: <span id="projectDuration">0</span> days</p>
+                        <p>Critical Chain Length: <span id="criticalChainLength">0</span> tasks</p>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Canvas Area -->
+            <main class="canvas-container">
+                <div class="canvas-header">
+                    <h2>GANTT Chart View</h2>
+                    <div class="zoom-controls">
+                        <button onclick="zoomIn()" class="btn btn-small">+</button>
+                        <button onclick="zoomOut()" class="btn btn-small">-</button>
+                        <button onclick="resetZoom()" class="btn btn-small">Reset</button>
+                    </div>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="ganttCanvas"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #4CAF50;"></span>
+                        <span>Regular Task</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #FF5722;"></span>
+                        <span>Critical Chain</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #FFC107;"></span>
+                        <span>Buffer</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #2196F3;"></span>
+                        <span>Selected Task</span>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Task Detail Modal -->
+        <div id="taskModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeTaskModal()">&times;</span>
+                <h2>Task Details</h2>
+                <div id="taskDetails"></div>
+                <button onclick="closeTaskModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+// Critical Chain Simulator - Interactive Canvas Application
+
+class Resource {
+    constructor(id, name) {
+        this.id = id;
+        this.name = name;
+        this.tasks = [];
+    }
+
+    toString() {
+        return `Resource ${String.fromCharCode(64 + this.id)}: ${this.name}`;
+    }
+}
+
+class Task {
+    constructor(id, title, duration, resourceId, predecessors = []) {
+        this.id = id;
+        this.title = title;
+        this.nominalDuration = duration;
+        this.duration = Math.ceil(duration / 2);
+        this.resourceId = resourceId;
+        this.predecessors = predecessors;
+        this.start = 0;
+        this.end = 0;
+        this.type = 0;
+        this.isCriticalChain = false;
+    }
+
+    toString() {
+        return `Task ${this.id}: ${this.title}`;
+    }
+}
+
+// Global state
+let resources = [];
+let tasks = [];
+let canvas, ctx;
+let scale = 1;
+let selectedTask = null;
+let criticalChain = [];
+
+// Constants
+const COLORS = {
+    regular: '#4CAF50',
+    critical: '#FF5722',
+    buffer: '#FFC107',
+    selected: '#2196F3',
+    grid: '#E0E0E0',
+    text: '#333333',
+    taskBorder: '#FFFFFF'
+};
+
+const CANVAS_CONFIG = {
+    rowHeight: 40,
+    dayWidth: 30,
+    leftMargin: 200,
+    topMargin: 80,
+    taskHeight: 30,
+    fontSize: 12,
+    bufferOpacity: 0.6
+};
+
+// Initialize application
+window.addEventListener('load', () => {
+    canvas = document.getElementById('ganttCanvas');
+    ctx = canvas.getContext('2d');
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    canvas.addEventListener('click', handleCanvasClick);
+
+    render();
+    updateUI();
+
+    // Auto-load example
+    setTimeout(() => loadExample(), 100);
+});
+
+function resizeCanvas() {
+    const wrapper = canvas.parentElement;
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    render();
+}
+
+// Resource management
+function addResource() {
+    const nameInput = document.getElementById('resourceName');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        alert('Please enter a resource name');
+        return;
+    }
+
+    const resource = new Resource(resources.length + 1, name);
+    resources.push(resource);
+
+    nameInput.value = '';
+    updateResourceList();
+    updateUI();
+    render();
+}
+
+function removeResource(id) {
+    const usedByTask = tasks.find(t => t.resourceId === id);
+    if (usedByTask) {
+        alert('Cannot remove resource: it is assigned to one or more tasks');
+        return;
+    }
+
+    resources = resources.filter(r => r.id !== id);
+    resources.forEach((r, idx) => r.id = idx + 1);
+
+    updateResourceList();
+    updateUI();
+    render();
+}
+
+function updateResourceList() {
+    const list = document.getElementById('resourceList');
+    const select = document.getElementById('taskResource');
+
+    list.innerHTML = '';
+    select.innerHTML = '<option value="">Select resource</option>';
+
+    resources.forEach(resource => {
+        const item = document.createElement('div');
+        item.className = 'list-item';
+        item.innerHTML = `
+            <span>${String.fromCharCode(64 + resource.id)} - ${resource.name}</span>
+            <button onclick="removeResource(${resource.id})" class="btn-remove">×</button>
+        `;
+        list.appendChild(item);
+
+        const option = document.createElement('option');
+        option.value = resource.id;
+        option.textContent = `${String.fromCharCode(64 + resource.id)} - ${resource.name}`;
+        select.appendChild(option);
+    });
+}
+
+// Task management
+function addTask() {
+    const nameInput = document.getElementById('taskName');
+    const durationInput = document.getElementById('taskDuration');
+    const resourceSelect = document.getElementById('taskResource');
+    const predsInput = document.getElementById('taskPredecessors');
+
+    const name = nameInput.value.trim();
+    const duration = parseInt(durationInput.value);
+    const resourceId = parseInt(resourceSelect.value);
+    const predsStr = predsInput.value.trim();
+
+    if (!name) {
+        alert('Please enter a task name');
+        return;
+    }
+
+    if (!duration || duration < 1) {
+        alert('Please enter a valid duration');
+        return;
+    }
+
+    const predecessors = predsStr ?
+        predsStr.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p) && p > 0) :
+        [];
+
+    for (let predId of predecessors) {
+        if (!tasks.find(t => t.id === predId)) {
+            alert(`Invalid predecessor: Task ${predId} does not exist`);
+            return;
+        }
+    }
+
+    const task = new Task(tasks.length + 1, name, duration, resourceId, predecessors);
+    tasks.push(task);
+
+    nameInput.value = '';
+    durationInput.value = '5';
+    resourceSelect.value = '';
+    predsInput.value = '';
+
+    updateTaskList();
+    calculateSchedule();
+    updateUI();
+    render();
+}
+
+function removeTask(id) {
+    const dependentTask = tasks.find(t => t.predecessors.includes(id));
+    if (dependentTask) {
+        alert(`Cannot remove task: Task ${dependentTask.id} depends on it`);
+        return;
+    }
+
+    tasks = tasks.filter(t => t.id !== id);
+    const oldToNew = {};
+    tasks.forEach((t, idx) => {
+        oldToNew[t.id] = idx + 1;
+        t.id = idx + 1;
+    });
+    tasks.forEach(t => {
+        t.predecessors = t.predecessors.map(p => oldToNew[p] || p);
+    });
+
+    updateTaskList();
+    calculateSchedule();
+    updateUI();
+    render();
+}
+
+function updateTaskList() {
+    const list = document.getElementById('taskList');
+    list.innerHTML = '';
+
+    tasks.forEach(task => {
+        const resource = resources.find(r => r.id === task.resourceId);
+        const resourceName = resource ? resource.name : 'Unassigned';
+        const predsStr = task.predecessors.length > 0 ? task.predecessors.join(', ') : 'None';
+
+        const item = document.createElement('div');
+        item.className = 'list-item';
+        item.innerHTML = `
+            <div class="task-item-content">
+                <strong>${task.id}. ${task.title}</strong>
+                <small>Duration: ${task.duration}d (${task.nominalDuration}d nominal) | Resource: ${resourceName}</small>
+                <small>Predecessors: ${predsStr}</small>
+            </div>
+            <button onclick="removeTask(${task.id})" class="btn-remove">×</button>
+        `;
+        list.appendChild(item);
+    });
+}
+
+// Scheduling algorithm
+function calculateSchedule() {
+    if (tasks.length === 0) {
+        updateUI();
+        render();
+        return;
+    }
+
+    tasks.forEach(task => {
+        task.start = 0;
+        task.end = 0;
+        task.isCriticalChain = false;
+    });
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        tasks.forEach(task => {
+            let earliestStart = 0;
+
+            if (task.predecessors.length > 0) {
+                task.predecessors.forEach(predId => {
+                    const pred = tasks.find(t => t.id === predId);
+                    if (pred && pred.end > earliestStart) {
+                        earliestStart = pred.end;
+                    }
+                });
+            }
+
+            if (task.resourceId) {
+                const resourceTasks = tasks.filter(t =>
+                    t.resourceId === task.resourceId &&
+                    t.id !== task.id &&
+                    t.end > 0
+                );
+
+                resourceTasks.forEach(rt => {
+                    if (rt.start < earliestStart + task.duration && rt.end > earliestStart) {
+                        if (rt.end > earliestStart) {
+                            earliestStart = rt.end;
+                        }
+                    }
+                });
+            }
+
+            const newStart = earliestStart;
+            const newEnd = earliestStart + task.duration;
+
+            if (task.start !== newStart || task.end !== newEnd) {
+                task.start = newStart;
+                task.end = newEnd;
+                changed = true;
+            }
+        });
+    }
+
+    identifyCriticalChain();
+
+    updateUI();
+    render();
+}
+
+function identifyCriticalChain() {
+    criticalChain = [];
+
+    if (tasks.length === 0) return;
+
+    let lastTask = tasks.reduce((max, task) => task.end > max.end ? task : max, tasks[0]);
+
+    let current = lastTask;
+    const chain = [];
+
+    while (current) {
+        chain.unshift(current.id);
+        current.isCriticalChain = true;
+
+        if (current.predecessors.length > 0) {
+            let latestPred = null;
+            let latestEnd = -1;
+
+            current.predecessors.forEach(predId => {
+                const pred = tasks.find(t => t.id === predId);
+                if (pred && pred.end > latestEnd) {
+                    latestEnd = pred.end;
+                    latestPred = pred;
+                }
+            });
+
+            current = latestPred;
+        } else {
+            current = null;
+        }
+    }
+
+    criticalChain = chain;
+}
+
+// Canvas rendering
+function render() {
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#FAFAFA';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (tasks.length === 0) {
+        drawEmptyState();
+        return;
+    }
+
+    const maxEnd = Math.max(...tasks.map(t => t.end), 0);
+    const projectDuration = maxEnd + 10;
+
+    drawGrid(projectDuration);
+    drawTasks();
+    drawDependencies();
+
+    if (document.getElementById('showBuffers').checked) {
+        drawBuffers();
+    }
+}
+
+function drawEmptyState() {
+    ctx.fillStyle = COLORS.text;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Add resources and tasks to begin', canvas.width / 2, canvas.height / 2);
+    ctx.font = '12px Arial';
+    ctx.fillText('Or click "Load Example" to see a sample project', canvas.width / 2, canvas.height / 2 + 25);
+}
+
+function drawGrid(projectDuration) {
+    const config = CANVAS_CONFIG;
+
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(0, 0, canvas.width, config.topMargin - 10);
+
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1;
+    ctx.font = `${config.fontSize}px Arial`;
+    ctx.textAlign = 'center';
+
+    for (let day = 0; day <= projectDuration; day++) {
+        const x = config.leftMargin + day * config.dayWidth * scale;
+
+        ctx.beginPath();
+        ctx.moveTo(x, config.topMargin);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+
+        if (day % 5 === 0 || day === projectDuration) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(`Day ${day}`, x, config.topMargin - 20);
+        }
+    }
+
+    tasks.forEach((task, idx) => {
+        const y = config.topMargin + idx * config.rowHeight;
+
+        ctx.fillStyle = idx % 2 === 0 ? '#FFFFFF' : '#F5F5F5';
+        ctx.fillRect(0, y, canvas.width, config.rowHeight);
+
+        ctx.fillStyle = COLORS.text;
+        ctx.textAlign = 'left';
+        ctx.font = `${config.fontSize}px Arial`;
+        const resource = resources.find(r => r.id === task.resourceId);
+        const resourceLabel = resource ? String.fromCharCode(64 + resource.id) : '';
+        ctx.fillText(`${task.id}. ${task.title} [${resourceLabel}]`, 10, y + config.rowHeight / 2 + 4);
+    });
+}
+
+function drawTasks() {
+    const config = CANVAS_CONFIG;
+    const showCriticalChain = document.getElementById('showCriticalChain').checked;
+
+    tasks.forEach((task, idx) => {
+        const y = config.topMargin + idx * config.rowHeight + (config.rowHeight - config.taskHeight) / 2;
+        const x = config.leftMargin + task.start * config.dayWidth * scale;
+        const width = task.duration * config.dayWidth * scale;
+
+        let color = COLORS.regular;
+        if (selectedTask && selectedTask.id === task.id) {
+            color = COLORS.selected;
+        } else if (showCriticalChain && task.isCriticalChain) {
+            color = COLORS.critical;
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, width, config.taskHeight);
+
+        ctx.strokeStyle = COLORS.taskBorder;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, config.taskHeight);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${config.fontSize}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${task.duration}d`, x + width / 2, y + config.taskHeight / 2 + 4);
+    });
+}
+
+function drawDependencies() {
+    const config = CANVAS_CONFIG;
+
+    ctx.strokeStyle = '#757575';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+
+    tasks.forEach((task, idx) => {
+        task.predecessors.forEach(predId => {
+            const pred = tasks.find(t => t.id === predId);
+            if (!pred) return;
+
+            const predIdx = tasks.indexOf(pred);
+
+            const x1 = config.leftMargin + pred.end * config.dayWidth * scale;
+            const y1 = config.topMargin + predIdx * config.rowHeight + config.rowHeight / 2;
+
+            const x2 = config.leftMargin + task.start * config.dayWidth * scale;
+            const y2 = config.topMargin + idx * config.rowHeight + config.rowHeight / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const arrowLength = 10;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - arrowLength * Math.cos(angle - Math.PI / 6),
+                      y2 - arrowLength * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - arrowLength * Math.cos(angle + Math.PI / 6),
+                      y2 - arrowLength * Math.sin(angle + Math.PI / 6));
+            ctx.stroke();
+        });
+    });
+
+    ctx.setLineDash([]);
+}
+
+function drawBuffers() {
+    const config = CANVAS_CONFIG;
+
+    criticalChain.forEach(taskId => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const bufferSize = Math.ceil((task.nominalDuration - task.duration) / 2);
+        const idx = tasks.indexOf(task);
+        const y = config.topMargin + idx * config.rowHeight + (config.rowHeight - config.taskHeight) / 2;
+        const x = config.leftMargin + task.end * config.dayWidth * scale;
+        const width = bufferSize * config.dayWidth * scale;
+
+        ctx.globalAlpha = config.bufferOpacity;
+        ctx.fillStyle = COLORS.buffer;
+        ctx.fillRect(x, y, width, config.taskHeight);
+        ctx.globalAlpha = 1.0;
+
+        ctx.fillStyle = COLORS.text;
+        ctx.font = `${config.fontSize - 2}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`B:${bufferSize}d`, x + width / 2, y + config.taskHeight / 2 + 4);
+    });
+}
+
+// Mouse interaction
+function handleCanvasClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const task = getTaskAtPosition(x, y);
+    if (task) {
+        showTaskDetails(task);
+    }
+}
+
+function getTaskAtPosition(x, y) {
+    const config = CANVAS_CONFIG;
+
+    for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i];
+        const taskY = config.topMargin + i * config.rowHeight + (config.rowHeight - config.taskHeight) / 2;
+        const taskX = config.leftMargin + task.start * config.dayWidth * scale;
+        const taskWidth = task.duration * config.dayWidth * scale;
+
+        if (x >= taskX && x <= taskX + taskWidth && y >= taskY && y <= taskY + config.taskHeight) {
+            return task;
+        }
+    }
+
+    return null;
+}
+
+function showTaskDetails(task) {
+    const modal = document.getElementById('taskModal');
+    const details = document.getElementById('taskDetails');
+
+    const resource = resources.find(r => r.id === task.resourceId);
+    const resourceName = resource ? resource.name : 'Unassigned';
+    const predsStr = task.predecessors.length > 0 ? task.predecessors.join(', ') : 'None';
+
+    details.innerHTML = `
+        <p><strong>ID:</strong> ${task.id}</p>
+        <p><strong>Title:</strong> ${task.title}</p>
+        <p><strong>Nominal Duration:</strong> ${task.nominalDuration} days</p>
+        <p><strong>Planned Duration (50%):</strong> ${task.duration} days</p>
+        <p><strong>Resource:</strong> ${resourceName}</p>
+        <p><strong>Predecessors:</strong> ${predsStr}</p>
+        <p><strong>Start Day:</strong> ${task.start}</p>
+        <p><strong>End Day:</strong> ${task.end}</p>
+        <p><strong>Critical Chain:</strong> ${task.isCriticalChain ? 'Yes' : 'No'}</p>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function closeTaskModal() {
+    document.getElementById('taskModal').style.display = 'none';
+}
+
+// UI updates
+function updateUI() {
+    document.getElementById('totalTasks').textContent = tasks.length;
+    document.getElementById('totalResources').textContent = resources.length;
+
+    const maxEnd = tasks.length > 0 ? Math.max(...tasks.map(t => t.end)) : 0;
+    document.getElementById('projectDuration').textContent = maxEnd;
+    document.getElementById('criticalChainLength').textContent = criticalChain.length;
+}
+
+// Zoom controls
+function zoomIn() {
+    scale *= 1.2;
+    render();
+}
+
+function zoomOut() {
+    scale /= 1.2;
+    render();
+}
+
+function resetZoom() {
+    scale = 1;
+    render();
+}
+
+// Utility functions
+function clearAll() {
+    if (!confirm('Are you sure you want to clear all tasks and resources?')) {
+        return;
+    }
+
+    tasks = [];
+    resources = [];
+    criticalChain = [];
+    selectedTask = null;
+
+    updateResourceList();
+    updateTaskList();
+    updateUI();
+    render();
+}
+
+function loadExample() {
+    tasks = [];
+    resources = [];
+
+    resources.push(new Resource(1, 'Developer Team'));
+    resources.push(new Resource(2, 'Designer'));
+    resources.push(new Resource(3, 'QA Team'));
+    resources.push(new Resource(4, 'DevOps'));
+
+    tasks.push(new Task(1, 'Requirements Analysis', 10, 1, []));
+    tasks.push(new Task(2, 'UI/UX Design', 8, 2, [1]));
+    tasks.push(new Task(3, 'Backend Development', 20, 1, [1]));
+    tasks.push(new Task(4, 'Frontend Development', 16, 1, [2]));
+    tasks.push(new Task(5, 'API Integration', 12, 1, [3, 4]));
+    tasks.push(new Task(6, 'Testing', 10, 3, [5]));
+    tasks.push(new Task(7, 'Deployment Setup', 6, 4, [6]));
+    tasks.push(new Task(8, 'Final Review', 4, 1, [7]));
+
+    updateResourceList();
+    updateTaskList();
+    calculateSchedule();
+    updateUI();
+    render();
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('taskModal');
+    if (event.target === modal) {
+        closeTaskModal();
+    }
+}
+    </script>
+</body>
+</html>
