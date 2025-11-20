@@ -25,10 +25,26 @@ This repository does not give access to the full software. It is meant as backup
 
 This repository now includes a modern **web-based interactive canvas** that brings Critical Chain Project Management to your browser!
 
-### Quick Start
-Simply open `index.html` in your web browser - no installation required!
+### 🆕 Version 2.0 - Enhanced Edition (Latest)
+The enhanced version includes **all-new features** for professional project management:
 
-### Features
+#### New in v2.0:
+- ✅ **Progress Tracking** - Track task completion with sliders (0-100%)
+- ✅ **Fever Chart** - Real-time buffer consumption monitoring with color-coded zones
+- ✅ **Save/Load** - Auto-save to browser + JSON export/import
+- ✅ **Enhanced Drag-Drop** - Click and drag tasks to reposition on timeline
+- ✅ **Current Day Tracker** - Visual marker showing project timeline progress
+- ✅ **Task Status** - Not Started, In Progress, Completed with visual icons
+- ✅ **Project Naming** - Organize multiple projects with meaningful names
+
+**Quick Start v2.0**: Open `index-enhanced.html` in your browser
+
+**Documentation**: See [ENHANCED_FEATURES.md](ENHANCED_FEATURES.md) for complete v2.0 guide
+
+### Version 1.0 - Original Edition
+The original version provides core CCPM visualization:
+
+#### Features v1.0:
 - **Interactive GANTT Chart** with HTML5 Canvas rendering
 - **Visual Task Management** with drag-and-drop support
 - **Real-time Critical Chain Visualization**
@@ -38,11 +54,13 @@ Simply open `index.html` in your web browser - no installation required!
 - **Click-to-view Task Details** for comprehensive information
 - **Example Project** to get started quickly
 
-### Learn More
-See [INTERACTIVE_CANVAS.md](INTERACTIVE_CANVAS.md) for detailed documentation, usage guide, and examples.
+**Quick Start v1.0**: Open `index.html` in your browser
+
+**Documentation**: See [INTERACTIVE_CANVAS.md](INTERACTIVE_CANVAS.md) for v1.0 guide
 
 ### Technologies
 - Pure HTML5, CSS3, and JavaScript
 - No frameworks or dependencies required
-- Works in all modern browsers
+- Works in all modern browsers (Chrome, Firefox, Safari, Edge)
 - Fully responsive design
+- LocalStorage for persistence (v2.0)

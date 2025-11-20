@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical Chain Simulator - Enhanced Interactive Canvas v2.0</title>
+    <link rel="stylesheet" href="styles-enhanced.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Critical Chain Project Management Simulator v2.0</h1>
+            <p>Enhanced with Progress Tracking, Fever Chart, and Save/Load</p>
+            <div class="header-controls">
+                <input type="text" id="projectNameInput" placeholder="Project Name"
+                       onchange="setProjectName(this.value)" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #ddd;">
+                <span id="projectNameDisplay" style="margin-left: 10px; font-weight: bold;">Untitled Project</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Control Panel -->
+            <aside class="control-panel">
+                <!-- Project Controls -->
+                <section class="panel-section">
+                    <h2>Project Controls</h2>
+                    <div class="project-controls">
+                        <label>Current Day: <span id="currentDay">0</span></label>
+                        <div class="day-controls">
+                            <button onclick="advanceDay()" class="btn btn-small btn-primary">+1 Day</button>
+                            <input type="number" id="dayInput" min="0" value="0" placeholder="Set day"
+                                   style="width: 80px; margin-left: 5px;">
+                            <button onclick="setCurrentDay(document.getElementById('dayInput').value)"
+                                    class="btn btn-small">Set</button>
+                        </div>
+                        <button onclick="exportToJSON()" class="btn btn-success">💾 Export Project</button>
+                        <button onclick="importFromJSON()" class="btn btn-success">📁 Import Project</button>
+                    </div>
+                </section>
+
+                <!-- Resources -->
+                <section class="panel-section">
+                    <h2>Resources</h2>
+                    <div id="resourceList" class="list-container"></div>
+                    <div class="input-group">
+                        <input type="text" id="resourceName" placeholder="Resource name">
+                        <button onclick="addResource()" class="btn btn-primary">Add Resource</button>
+                    </div>
+                </section>
+
+                <!-- Tasks -->
+                <section class="panel-section">
+                    <h2>Tasks</h2>
+                    <div id="taskList" class="list-container task-list-scrollable"></div>
+                    <div class="input-group">
+                        <input type="text" id="taskName" placeholder="Task name">
+                        <input type="number" id="taskDuration" placeholder="Days" min="1" value="5">
+                        <select id="taskResource">
+                            <option value="">Select resource</option>
+                        </select>
+                        <input type="text" id="taskPredecessors" placeholder="Predecessors (e.g., 1,2)">
+                        <button onclick="addTask()" class="btn btn-primary">Add Task</button>
+                    </div>
+                </section>
+
+                <!-- View Options -->
+                <section class="panel-section">
+                    <h2>View Options</h2>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showCriticalChain" checked onchange="render()">
+                        Show Critical Chain
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showBuffers" checked onchange="render()">
+                        Show Buffers
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showResourceConflicts" checked onchange="render()">
+                        Highlight Resource Conflicts
+                    </label>
+                    <button onclick="calculateSchedule()" class="btn btn-success">Calculate Schedule</button>
+                    <button onclick="clearAll()" class="btn btn-danger">Clear All</button>
+                    <button onclick="loadExample()" class="btn btn-secondary">Load Example</button>
+                </section>
+
+                <!-- Project Info -->
+                <section class="panel-section">
+                    <h2>Project Info</h2>
+                    <div id="projectInfo" class="info-box">
+                        <p>Total Tasks: <span id="totalTasks">0</span></p>
+                        <p>Total Resources: <span id="totalResources">0</span></p>
+                        <p>Project Duration: <span id="projectDuration">0</span> days</p>
+                        <p>Critical Chain Length: <span id="criticalChainLength">0</span> tasks</p>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Main Canvas Area -->
+            <main class="canvas-area">
+                <!-- GANTT Chart -->
+                <section class="canvas-container">
+                    <div class="canvas-header">
+                        <h2>GANTT Chart View</h2>
+                        <div class="zoom-controls">
+                            <button onclick="zoomIn()" class="btn btn-small">+</button>
+                            <button onclick="zoomOut()" class="btn btn-small">-</button>
+                            <button onclick="resetZoom()" class="btn btn-small">Reset</button>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="ganttCanvas"></canvas>
+                    </div>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #4CAF50;"></span>
+                            <span>Regular Task</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #FF5722;"></span>
+                            <span>Critical Chain</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #FFC107;"></span>
+                            <span>Buffer</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #03A9F4;"></span>
+                            <span>In Progress</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #9C27B0;"></span>
+                            <span>Completed</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: #2196F3;"></span>
+                            <span>Selected</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Fever Chart -->
+                <section class="fever-chart-container">
+                    <div class="canvas-header">
+                        <h2>Fever Chart - Buffer Consumption</h2>
+                        <small>Tracks buffer usage over time (Green < 33%, Yellow 33-66%, Red > 66%)</small>
+                    </div>
+                    <div class="canvas-wrapper fever-wrapper">
+                        <canvas id="feverCanvas"></canvas>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Task Detail Modal -->
+        <div id="taskModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeTaskModal()">&times;</span>
+                <h2>Task Details</h2>
+                <div id="taskDetails"></div>
+                <button onclick="closeTaskModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app-enhanced.js"></script>
+</body>
+</html>
