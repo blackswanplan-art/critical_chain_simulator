@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strategic Planning Edition v3.0 - Critical Chain Simulator</title>
+    <title>Systemic Planning Edition v3.0 - Critical Chain Simulator</title>
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; overflow: hidden; }
@@ -62,7 +62,7 @@ header p { font-size: 12px; opacity: 0.9; }
 .canvas-header { padding: 15px 20px; background: #f9f9f9; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
 .canvas-header h2 { font-size: 16px; }
 .canvas-wrapper { flex: 1; overflow: auto; }
-#strategicCanvas { display: block; width: 100%; height: 100%; }
+#systemicCanvas { display: block; width: 100%; height: 100%; }
 
 /* Stats */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
@@ -88,7 +88,7 @@ header p { font-size: 12px; opacity: 0.9; }
 <body>
     <div class="container">
         <header>
-            <h1>📊 Strategic Planning Edition v3.0</h1>
+            <h1>📊 Systemic Planning Edition v3.0</h1>
             <p>Hierarchical Planning: Objectives → Tactics/Boulders → Initiatives/Rocks → Tasks/To-Dos</p>
             <div class="header-controls">
                 <button onclick="exportToJSON()">💾 Export</button>
@@ -102,7 +102,7 @@ header p { font-size: 12px; opacity: 0.9; }
             <!-- Sidebar with Hierarchy -->
             <aside class="sidebar">
                 <div class="sidebar-section">
-                    <h2>📈 Strategic Overview</h2>
+                    <h2>📈 Systemic Overview</h2>
                     <div class="stats">
                         <div class="stat-card">
                             <div class="stat-number" id="statObjectives">0</div>
@@ -124,7 +124,7 @@ header p { font-size: 12px; opacity: 0.9; }
                 </div>
 
                 <div class="sidebar-section">
-                    <h2>📋 Strategic Hierarchy</h2>
+                    <h2>📋 Systemic Hierarchy</h2>
                     <button onclick="showAddObjectiveForm()" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;">+ Add Objective (max 3)</button>
                     <div id="hierarchyTree"></div>
                 </div>
@@ -139,13 +139,13 @@ header p { font-size: 12px; opacity: 0.9; }
             <!-- Canvas Area -->
             <main class="canvas-area">
                 <div class="canvas-header">
-                    <h2>Strategic Timeline Visualization</h2>
+                    <h2>Systemic Timeline Visualization</h2>
                     <div>
-                        <small>Multi-year strategic view</small>
+                        <small>Multi-level hierarchical view: Objectives → Tactics → Initiatives → Tasks</small>
                     </div>
                 </div>
                 <div class="canvas-wrapper">
-                    <canvas id="strategicCanvas"></canvas>
+                    <canvas id="systemicCanvas"></canvas>
                 </div>
             </main>
         </div>
