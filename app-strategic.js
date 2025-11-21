@@ -100,19 +100,103 @@ class SystemicTask {
     constructor(id, title, durationDays, initiativeId, resourceId = null) {
         this.id = id;
         this.title = title;
-        this.durationDays = durationDays; // 1-90 days
+        this.durationDays = durationDays; // 1-90 days (nominal duration with safety)
         this.initiativeId = initiativeId;
-        this.resourceId = resourceId;
+
+        // CCPM Multi-Resource Support
+        this.resourceAssignments = []; // Array of {resourceId, hoursPerDay, role}
+
+        // Backward compatibility: convert old single resourceId to array
+        if (resourceId) {
+            this.resourceAssignments.push({
+                resourceId: resourceId,
+                hoursPerDay: 8,
+                role: 'primary'
+            });
+        }
+
+        // CCPM Duration Properties
+        this.nominalDuration = durationDays; // Original estimate with safety
+        this.ccpmDuration = Math.max(1, Math.ceil(durationDays / 2)); // 50% rule - aggressive estimate
+        this.safetyTime = durationDays - this.ccpmDuration; // Removed safety (goes into buffers)
+        this.estimatedHours = durationDays * 8; // Total effort estimate
+
+        // Task Status
         this.progress = 0; // 0-100%
-        this.status = 'not_started';
+        this.status = 'not_started'; // not_started, in_progress, completed
         this.description = '';
-        this.predecessors = [];
+
+        // Dependencies
+        this.predecessors = []; // Task IDs that must complete before this starts
+        this.successors = []; // Task IDs that depend on this (calculated)
+
+        // CCPM Scheduling Properties (calculated by scheduler)
+        this.earliestStart = 0;
+        this.latestStart = Infinity;
+        this.earliestFinish = 0;
+        this.latestFinish = Infinity;
+        this.totalFloat = Infinity; // Slack time
+        this.freeFloat = 0;
+        this.isCriticalChain = false;
+        this.scheduledStart = null; // Actual scheduled start (late-start)
+        this.scheduledEnd = null; // Actual scheduled end
+
+        // Actual dates (for tracking)
         this.actualStart = null;
         this.actualEnd = null;
     }
 
+    // Add a resource to this task
+    addResource(resourceId, hoursPerDay = 8, role = 'primary') {
+        // Check if resource already assigned
+        const existing = this.resourceAssignments.find(ra => ra.resourceId === resourceId);
+        if (!existing) {
+            this.resourceAssignments.push({resourceId, hoursPerDay, role});
+        }
+    }
+
+    // Remove a resource from this task
+    removeResource(resourceId) {
+        this.resourceAssignments = this.resourceAssignments.filter(
+            ra => ra.resourceId !== resourceId
+        );
+    }
+
+    // Get all resource IDs assigned to this task
+    getResourceIds() {
+        return this.resourceAssignments.map(ra => ra.resourceId);
+    }
+
+    // Check if a specific resource is assigned
+    hasResource(resourceId) {
+        return this.resourceAssignments.some(ra => ra.resourceId === resourceId);
+    }
+
+    // Get total resource hours needed
+    getTotalResourceHours() {
+        return this.resourceAssignments.reduce((sum, ra) =>
+            sum + (ra.hoursPerDay * this.ccpmDuration), 0);
+    }
+
+    // Backward compatibility: getter for old code using task.resourceId
+    get resourceId() {
+        return this.resourceAssignments.length > 0
+            ? this.resourceAssignments[0].resourceId
+            : null;
+    }
+
+    // Backward compatibility: setter for old code
+    set resourceId(value) {
+        if (value && !this.hasResource(value)) {
+            this.addResource(value, 8, 'primary');
+        }
+    }
+
     toString() {
-        return `✓ TASK/TO-DO: ${this.title} (${this.durationDays}d)`;
+        const resources = this.resourceAssignments.length > 0
+            ? ` [${this.resourceAssignments.length} resources]`
+            : '';
+        return `✓ TASK/TO-DO: ${this.title} (${this.durationDays}d)${resources}`;
     }
 }
 
@@ -399,23 +483,55 @@ class SystemicProjectState {
         this.buffers = this.buffers.filter(b => b.id !== id);
     }
 
-    // Calculate resource load across all tasks
+    // Calculate resource load across all tasks (multi-resource aware)
     calculateResourceLoad() {
         this.resourceLoads.clear();
 
         const allTasks = this.getAllTasks();
         allTasks.forEach(task => {
-            if (task.resourceId) {
-                if (!this.resourceLoads.has(task.resourceId)) {
-                    this.resourceLoads.set(task.resourceId, {
+            // Handle multi-resource assignments
+            if (task.resourceAssignments && task.resourceAssignments.length > 0) {
+                task.resourceAssignments.forEach(assignment => {
+                    const resourceId = assignment.resourceId;
+
+                    if (!this.resourceLoads.has(resourceId)) {
+                        this.resourceLoads.set(resourceId, {
+                            totalDays: 0,
+                            totalHours: 0,
+                            tasks: [],
+                            utilizationPercent: 0
+                        });
+                    }
+
+                    const load = this.resourceLoads.get(resourceId);
+
+                    // Calculate hours based on assignment
+                    const taskHours = assignment.hoursPerDay * task.ccpmDuration;
+                    load.totalHours += taskHours;
+                    load.totalDays += (taskHours / 8); // Convert to day-equivalents
+
+                    // Only add task once even if it has multiple resources
+                    if (!load.tasks.some(t => t.id === task.id)) {
+                        load.tasks.push(task);
+                    }
+                });
+            }
+            // Backward compatibility: handle old tasks with single resourceId
+            else if (task.resourceId) {
+                const resourceId = task.resourceId;
+
+                if (!this.resourceLoads.has(resourceId)) {
+                    this.resourceLoads.set(resourceId, {
                         totalDays: 0,
+                        totalHours: 0,
                         tasks: [],
                         utilizationPercent: 0
                     });
                 }
 
-                const load = this.resourceLoads.get(task.resourceId);
+                const load = this.resourceLoads.get(resourceId);
                 load.totalDays += task.durationDays;
+                load.totalHours += task.durationDays * 8;
                 load.tasks.push(task);
             }
         });
@@ -424,8 +540,8 @@ class SystemicProjectState {
         this.resourceLoads.forEach((load, resourceId) => {
             const resource = this.getResource(resourceId);
             if (resource) {
-                const maxAvailableDays = resource.getEffectiveCapacity() * 90; // Assume 90-day window
-                load.utilizationPercent = (load.totalDays / maxAvailableDays) * 100;
+                const maxAvailableHours = resource.getMaxDailyHours() * 90; // 90-day window
+                load.utilizationPercent = (load.totalHours / maxAvailableHours) * 100;
             }
         });
 
@@ -812,11 +928,28 @@ function createInitiativeElement(initiative, objectiveId, tacticId) {
 function createTaskElement(task, objectiveId, tacticId, initiativeId) {
     const div = document.createElement('div');
     div.className = 'hierarchy-item task-item';
+
+    // Build resource badges display
+    let resourceBadges = '';
+    if (task.resourceAssignments && task.resourceAssignments.length > 0) {
+        task.resourceAssignments.forEach(assignment => {
+            const resource = systemicState.getResource(assignment.resourceId);
+            if (resource) {
+                resourceBadges += `<span style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px;">
+                    ${resource.getTypeIcon()} ${resource.name} (${assignment.hoursPerDay}h/d)
+                </span>`;
+            }
+        });
+    }
+
+    const resourceDisplay = resourceBadges ?
+        `<div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">${resourceBadges}</div>` : '';
+
     div.innerHTML = `
         <div class="item-header">
             <span class="item-icon">✓</span>
             <span class="item-title" onclick="editItem('task', ${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id})">${task.title}</span>
-            <span class="item-timeline">${task.durationDays} days</span>
+            <span class="item-timeline">${task.durationDays} days (CCPM: ${task.ccpmDuration}d)</span>
             <div class="task-progress-inline">
                 <input type="range" min="0" max="100" value="${task.progress}"
                        onchange="updateTaskProgress(${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id}, this.value)"
@@ -825,6 +958,7 @@ function createTaskElement(task, objectiveId, tacticId, initiativeId) {
             </div>
             <button onclick="deleteTask(${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id})" class="btn-remove">×</button>
         </div>
+        ${resourceDisplay}
     `;
 
     return div;
@@ -1041,10 +1175,26 @@ function showAddTaskForm(objectiveId, tacticId, initiativeId) {
     const modal = document.getElementById('editModal');
     const content = document.getElementById('editModalContent');
 
-    let resourceOptions = '<option value="">None</option>';
-    systemicState.resources.forEach(r => {
-        resourceOptions += `<option value="${r.id}">${r.name}</option>`;
-    });
+    // Build multi-resource selection with checkboxes
+    let resourceCheckboxes = '';
+    if (systemicState.resources.length === 0) {
+        resourceCheckboxes = '<p style="color: #999; font-size: 12px;">No resources available. Add resources first.</p>';
+    } else {
+        systemicState.resources.forEach(r => {
+            resourceCheckboxes += `
+                <div style="margin-bottom: 8px; padding: 6px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}">
+                        <span>${r.getTypeIcon()} ${r.name}</span>
+                        <input type="number" class="resource-hours" data-resource="${r.id}"
+                               placeholder="hrs/day" min="1" max="24" value="8"
+                               style="width: 70px; margin-left: auto; padding: 4px; font-size: 12px;"
+                               disabled>
+                    </label>
+                </div>
+            `;
+        });
+    }
 
     content.innerHTML = `
         <h2>Add Task / To-Do</h2>
@@ -1058,8 +1208,13 @@ function showAddTaskForm(objectiveId, tacticId, initiativeId) {
             <input type="number" id="taskDuration" min="1" max="90" value="5">
         </div>
         <div class="form-group">
-            <label>Resource (Optional):</label>
-            <select id="taskResource">${resourceOptions}</select>
+            <label>Resources (Select Multiple):</label>
+            <div id="taskResourcesContainer" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+                ${resourceCheckboxes}
+            </div>
+            <p style="font-size: 11px; color: #666; margin-top: 5px;">
+                💡 Check resources and set hours/day for each. Tasks can use multiple resources simultaneously.
+            </p>
         </div>
         <div class="form-actions">
             <button onclick="saveTask(${objectiveId}, ${tacticId}, ${initiativeId})" class="btn btn-primary">Save</button>
@@ -1068,21 +1223,54 @@ function showAddTaskForm(objectiveId, tacticId, initiativeId) {
     `;
 
     modal.style.display = 'block';
+
+    // Add event listeners to enable/disable hours input when checkbox is toggled
+    document.querySelectorAll('.resource-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const resourceId = e.target.value;
+            const hoursInput = document.querySelector(`.resource-hours[data-resource="${resourceId}"]`);
+            if (hoursInput) {
+                hoursInput.disabled = !e.target.checked;
+                if (e.target.checked && !hoursInput.value) {
+                    hoursInput.value = 8; // Default to 8 hours/day
+                }
+            }
+        });
+    });
 }
 
 function saveTask(objectiveId, tacticId, initiativeId) {
     const title = document.getElementById('taskTitle').value.trim();
     const duration = parseInt(document.getElementById('taskDuration').value);
-    const resourceId = document.getElementById('taskResource').value ? 
-                       parseInt(document.getElementById('taskResource').value) : null;
 
     if (!title) {
         alert('Please enter a title');
         return;
     }
 
+    // Collect selected resources and their hours
+    const resourceAssignments = [];
+    document.querySelectorAll('.resource-checkbox:checked').forEach(checkbox => {
+        const resourceId = parseInt(checkbox.value);
+        const hoursInput = document.querySelector(`.resource-hours[data-resource="${resourceId}"]`);
+        const hoursPerDay = hoursInput ? parseInt(hoursInput.value) || 8 : 8;
+
+        resourceAssignments.push({
+            resourceId: resourceId,
+            hoursPerDay: hoursPerDay,
+            role: 'primary'
+        });
+    });
+
     try {
-        systemicState.addTask(title, duration, objectiveId, tacticId, initiativeId, resourceId);
+        // Create task (backward compatible - pass null for old resourceId param)
+        const task = systemicState.addTask(title, duration, objectiveId, tacticId, initiativeId, null);
+
+        // Add resource assignments to the task
+        resourceAssignments.forEach(assignment => {
+            task.addResource(assignment.resourceId, assignment.hoursPerDay, assignment.role);
+        });
+
         closeModal();
         renderHierarchy();
         renderCanvas();
@@ -1359,11 +1547,31 @@ function editTask(objectiveId, tacticId, initiativeId, taskId) {
     const modal = document.getElementById('editModal');
     const content = document.getElementById('editModalContent');
 
-    let resourceOptions = '<option value="">None</option>';
-    systemicState.resources.forEach(r => {
-        const selected = r.id === task.resourceId ? 'selected' : '';
-        resourceOptions += `<option value="${r.id}" ${selected}>${r.name}</option>`;
-    });
+    // Build multi-resource selection with checkboxes (pre-selected based on task)
+    let resourceCheckboxes = '';
+    if (systemicState.resources.length === 0) {
+        resourceCheckboxes = '<p style="color: #999; font-size: 12px;">No resources available. Add resources first.</p>';
+    } else {
+        systemicState.resources.forEach(r => {
+            const assignment = task.resourceAssignments.find(ra => ra.resourceId === r.id);
+            const isChecked = assignment ? 'checked' : '';
+            const hoursValue = assignment ? assignment.hoursPerDay : 8;
+            const hoursDisabled = assignment ? '' : 'disabled';
+
+            resourceCheckboxes += `
+                <div style="margin-bottom: 8px; padding: 6px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}" ${isChecked}>
+                        <span>${r.getTypeIcon()} ${r.name}</span>
+                        <input type="number" class="resource-hours" data-resource="${r.id}"
+                               placeholder="hrs/day" min="1" max="24" value="${hoursValue}"
+                               style="width: 70px; margin-left: auto; padding: 4px; font-size: 12px;"
+                               ${hoursDisabled}>
+                    </label>
+                </div>
+            `;
+        });
+    }
 
     content.innerHTML = `
         <h2>Edit Task / To-Do</h2>
@@ -1377,8 +1585,13 @@ function editTask(objectiveId, tacticId, initiativeId, taskId) {
             <input type="number" id="taskDuration" min="1" max="90" value="${task.durationDays}">
         </div>
         <div class="form-group">
-            <label>Resource:</label>
-            <select id="taskResource">${resourceOptions}</select>
+            <label>Resources (Select Multiple):</label>
+            <div id="taskResourcesContainer" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+                ${resourceCheckboxes}
+            </div>
+            <p style="font-size: 11px; color: #666; margin-top: 5px;">
+                💡 Check resources and set hours/day for each. Tasks can use multiple resources simultaneously.
+            </p>
         </div>
         <div class="form-group">
             <label>Description (Optional):</label>
@@ -1391,6 +1604,20 @@ function editTask(objectiveId, tacticId, initiativeId, taskId) {
     `;
 
     modal.style.display = 'block';
+
+    // Add event listeners to enable/disable hours input when checkbox is toggled
+    document.querySelectorAll('.resource-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const resourceId = e.target.value;
+            const hoursInput = document.querySelector(`.resource-hours[data-resource="${resourceId}"]`);
+            if (hoursInput) {
+                hoursInput.disabled = !e.target.checked;
+                if (e.target.checked && !hoursInput.value) {
+                    hoursInput.value = 8; // Default to 8 hours/day
+                }
+            }
+        });
+    });
 }
 
 function updateTask(objectiveId, tacticId, initiativeId, taskId) {
@@ -1399,8 +1626,6 @@ function updateTask(objectiveId, tacticId, initiativeId, taskId) {
 
     const title = document.getElementById('taskTitle').value.trim();
     const duration = parseInt(document.getElementById('taskDuration').value);
-    const resourceId = document.getElementById('taskResource').value ?
-                       parseInt(document.getElementById('taskResource').value) : null;
     const description = document.getElementById('taskDescription').value.trim();
 
     if (!title) {
@@ -1413,10 +1638,30 @@ function updateTask(objectiveId, tacticId, initiativeId, taskId) {
         return;
     }
 
+    // Collect selected resources and their hours
+    const newResourceAssignments = [];
+    document.querySelectorAll('.resource-checkbox:checked').forEach(checkbox => {
+        const resourceId = parseInt(checkbox.value);
+        const hoursInput = document.querySelector(`.resource-hours[data-resource="${resourceId}"]`);
+        const hoursPerDay = hoursInput ? parseInt(hoursInput.value) || 8 : 8;
+
+        newResourceAssignments.push({
+            resourceId: resourceId,
+            hoursPerDay: hoursPerDay,
+            role: 'primary'
+        });
+    });
+
+    // Update task properties
     task.title = title;
     task.durationDays = duration;
-    task.resourceId = resourceId;
+    task.nominalDuration = duration;
+    task.ccpmDuration = Math.max(1, Math.ceil(duration / 2));
+    task.safetyTime = duration - task.ccpmDuration;
     task.description = description;
+
+    // Replace resource assignments
+    task.resourceAssignments = newResourceAssignments;
 
     closeModal();
     renderHierarchy();
