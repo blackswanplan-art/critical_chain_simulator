@@ -98,6 +98,7 @@ header p { font-size: 12px; opacity: 0.9; }
             <h1>📊 Systemic Planning Edition v3.0</h1>
             <p>Hierarchical Planning: Objectives → Tactics/Boulders → Initiatives/Rocks → Tasks/To-Dos</p>
             <div class="header-controls">
+                <button onclick="scheduleProject()" style="background: rgba(76, 175, 80, 0.3); font-weight: bold;">⚡ Schedule Project (CCPM)</button>
                 <button onclick="exportToJSON()">💾 Export</button>
                 <button onclick="importFromJSON()">📁 Import</button>
                 <button onclick="loadExamplePlan()">📋 Load Example</button>
@@ -168,6 +169,7 @@ header p { font-size: 12px; opacity: 0.9; }
         </div>
     </div>
 
+    <script src="ccpm-scheduler.js"></script>
     <script src="app-strategic.js"></script>
 </body>
 </html>

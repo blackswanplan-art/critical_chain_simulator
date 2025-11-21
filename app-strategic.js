@@ -942,8 +942,26 @@ function createTaskElement(task, objectiveId, tacticId, initiativeId) {
         });
     }
 
-    const resourceDisplay = resourceBadges ?
-        `<div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">${resourceBadges}</div>` : '';
+    // Critical chain badge
+    let criticalChainBadge = '';
+    if (task.isCriticalChain) {
+        criticalChainBadge = `<span style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; margin-right: 4px;">
+            ⚠️ CRITICAL CHAIN
+        </span>`;
+    }
+
+    // Scheduled dates display
+    let scheduledInfo = '';
+    if (task.scheduledStart !== null && task.scheduledStart !== undefined) {
+        const floatInfo = task.totalFloat !== undefined && task.totalFloat !== Infinity ?
+            ` | Float: ${task.totalFloat.toFixed(1)}d` : '';
+        scheduledInfo = `<div style="margin-top: 4px; font-size: 10px; color: #666;">
+            Scheduled: Day ${task.scheduledStart.toFixed(1)} - ${task.scheduledEnd.toFixed(1)}${floatInfo}
+        </div>`;
+    }
+
+    const resourceDisplay = (resourceBadges || criticalChainBadge) ?
+        `<div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">${criticalChainBadge}${resourceBadges}</div>` : '';
 
     div.innerHTML = `
         <div class="item-header">
@@ -959,6 +977,7 @@ function createTaskElement(task, objectiveId, tacticId, initiativeId) {
             <button onclick="deleteTask(${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id})" class="btn-remove">×</button>
         </div>
         ${resourceDisplay}
+        ${scheduledInfo}
     `;
 
     return div;
@@ -2774,6 +2793,63 @@ function loadExamplePlan() {
     saveToLocalStorage();
 }
 
+// ===== CCPM SCHEDULING =====
+
+function scheduleProject() {
+    // Run CCPM scheduling algorithm
+    const allTasks = systemicState.getAllTasks();
+    const allResources = systemicState.resources;
+
+    if (allTasks.length === 0) {
+        alert('No tasks to schedule. Add tasks first.');
+        return;
+    }
+
+    console.log(`Scheduling ${allTasks.length} tasks with ${allResources.length} resources...`);
+
+    try {
+        // Create scheduler instance
+        const scheduler = new CCPMScheduler(allTasks, allResources);
+
+        // Run scheduling algorithm
+        const result = scheduler.calculateSchedule();
+
+        // Update system state with results
+        systemicState.criticalChain = result.criticalChain;
+
+        // Show summary
+        const criticalChainTaskTitles = result.criticalChain.map(t => t.title).join(', ');
+        const feedingChainCount = result.feedingChains.length;
+
+        alert(`✅ Project Scheduled Successfully!
+
+Project Duration: ${result.projectDuration} days
+
+Critical Chain: ${result.criticalChain.length} tasks
+${criticalChainTaskTitles}
+
+Feeding Chains: ${feedingChainCount}
+
+All tasks now have scheduled start/end dates.
+Critical chain tasks are marked in red.
+Non-critical tasks use late-start scheduling.
+
+View the Timeline or Calendar visualization to see the schedule.`);
+
+        // Re-render everything
+        renderHierarchy();
+        renderCanvas();
+        updateStats();
+        saveToLocalStorage();
+
+        console.log('Scheduling complete:', result);
+
+    } catch (error) {
+        console.error('Scheduling error:', error);
+        alert(`❌ Scheduling Failed\n\nError: ${error.message}\n\nCheck console for details.`);
+    }
+}
+
 function clearAll() {
     if (!confirm('Clear entire systemic plan?')) return;
 
@@ -2812,3 +2888,4 @@ window.closeModal = closeModal;
 window.loadExamplePlan = loadExamplePlan;
 window.clearAll = clearAll;
 window.switchView = switchView;
+window.scheduleProject = scheduleProject;
