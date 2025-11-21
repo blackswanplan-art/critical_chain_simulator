@@ -865,9 +865,290 @@ function deleteTask(objectiveId, tacticId, initiativeId, taskId) {
 // ===== EDIT OPERATIONS =====
 
 function editItem(type, ...ids) {
-    // Implementation for editing existing items
-    console.log('Edit', type, ids);
-    // TODO: Show edit form with existing values
+    switch(type) {
+        case 'objective':
+            editObjective(ids[0]);
+            break;
+        case 'tactic':
+            editTactic(ids[0], ids[1]);
+            break;
+        case 'initiative':
+            editInitiative(ids[0], ids[1], ids[2]);
+            break;
+        case 'task':
+            editTask(ids[0], ids[1], ids[2], ids[3]);
+            break;
+    }
+}
+
+function editObjective(objectiveId) {
+    const objective = strategicState.getObjective(objectiveId);
+    if (!objective) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Edit Objective (Strategic Goal)</h2>
+        <p class="form-subtitle">3-5 year timeline</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="objTitle" placeholder="Enter objective title" value="${objective.title}">
+        </div>
+        <div class="form-group">
+            <label>Start Year:</label>
+            <input type="number" id="objStartYear" value="${objective.startYear}" min="2020" max="2050">
+        </div>
+        <div class="form-group">
+            <label>End Year:</label>
+            <input type="number" id="objEndYear" value="${objective.endYear}" min="2020" max="2050">
+        </div>
+        <div class="form-group">
+            <label>Description (Optional):</label>
+            <textarea id="objDescription" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${objective.description || ''}</textarea>
+        </div>
+        <div class="form-actions">
+            <button onclick="updateObjective(${objectiveId})" class="btn btn-primary">Update</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function updateObjective(objectiveId) {
+    const objective = strategicState.getObjective(objectiveId);
+    if (!objective) return;
+
+    const title = document.getElementById('objTitle').value.trim();
+    const startYear = parseInt(document.getElementById('objStartYear').value);
+    const endYear = parseInt(document.getElementById('objEndYear').value);
+    const description = document.getElementById('objDescription').value.trim();
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    if (endYear <= startYear) {
+        alert('End year must be after start year');
+        return;
+    }
+
+    if (endYear - startYear < 3 || endYear - startYear > 5) {
+        alert('Objectives should be 3-5 years');
+        return;
+    }
+
+    objective.title = title;
+    objective.startYear = startYear;
+    objective.endYear = endYear;
+    objective.description = description;
+
+    closeModal();
+    renderHierarchy();
+    renderCanvas();
+    saveToLocalStorage();
+}
+
+function editTactic(objectiveId, tacticId) {
+    const tactic = strategicState.getTactic(objectiveId, tacticId);
+    const objective = strategicState.getObjective(objectiveId);
+    if (!tactic || !objective) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Edit Tactic / Boulder</h2>
+        <p class="form-subtitle">1-2 year timeline for Objective: ${objective.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="tacticTitle" placeholder="Enter tactic title" value="${tactic.title}">
+        </div>
+        <div class="form-group">
+            <label>Start Quarter:</label>
+            <input type="text" id="tacticStartQ" placeholder="e.g., 2024-Q1" value="${tactic.startQuarter}">
+        </div>
+        <div class="form-group">
+            <label>End Quarter:</label>
+            <input type="text" id="tacticEndQ" placeholder="e.g., 2025-Q4" value="${tactic.endQuarter}">
+        </div>
+        <div class="form-group">
+            <label>Description (Optional):</label>
+            <textarea id="tacticDescription" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${tactic.description || ''}</textarea>
+        </div>
+        <div class="form-actions">
+            <button onclick="updateTactic(${objectiveId}, ${tacticId})" class="btn btn-primary">Update</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function updateTactic(objectiveId, tacticId) {
+    const tactic = strategicState.getTactic(objectiveId, tacticId);
+    if (!tactic) return;
+
+    const title = document.getElementById('tacticTitle').value.trim();
+    const startQ = document.getElementById('tacticStartQ').value.trim();
+    const endQ = document.getElementById('tacticEndQ').value.trim();
+    const description = document.getElementById('tacticDescription').value.trim();
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    tactic.title = title;
+    tactic.startQuarter = startQ;
+    tactic.endQuarter = endQ;
+    tactic.description = description;
+
+    closeModal();
+    renderHierarchy();
+    renderCanvas();
+    saveToLocalStorage();
+}
+
+function editInitiative(objectiveId, tacticId, initiativeId) {
+    const initiative = strategicState.getInitiative(objectiveId, tacticId, initiativeId);
+    const tactic = strategicState.getTactic(objectiveId, tacticId);
+    if (!initiative || !tactic) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Edit Initiative / Action Plan / Rock</h2>
+        <p class="form-subtitle">1-5 quarter project for Tactic: ${tactic.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="initTitle" placeholder="Enter initiative title" value="${initiative.title}">
+        </div>
+        <div class="form-group">
+            <label>Start Quarter:</label>
+            <input type="text" id="initStartQ" placeholder="e.g., 2024-Q1" value="${initiative.startQuarter}">
+        </div>
+        <div class="form-group">
+            <label>Duration (Quarters):</label>
+            <input type="number" id="initDuration" min="1" max="5" value="${initiative.durationQuarters}">
+        </div>
+        <div class="form-group">
+            <label>Description (Optional):</label>
+            <textarea id="initDescription" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${initiative.description || ''}</textarea>
+        </div>
+        <div class="form-actions">
+            <button onclick="updateInitiative(${objectiveId}, ${tacticId}, ${initiativeId})" class="btn btn-primary">Update</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function updateInitiative(objectiveId, tacticId, initiativeId) {
+    const initiative = strategicState.getInitiative(objectiveId, tacticId, initiativeId);
+    if (!initiative) return;
+
+    const title = document.getElementById('initTitle').value.trim();
+    const startQ = document.getElementById('initStartQ').value.trim();
+    const duration = parseInt(document.getElementById('initDuration').value);
+    const description = document.getElementById('initDescription').value.trim();
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    if (duration < 1 || duration > 5) {
+        alert('Duration must be 1-5 quarters');
+        return;
+    }
+
+    initiative.title = title;
+    initiative.startQuarter = startQ;
+    initiative.durationQuarters = duration;
+    initiative.description = description;
+
+    closeModal();
+    renderHierarchy();
+    renderCanvas();
+    saveToLocalStorage();
+}
+
+function editTask(objectiveId, tacticId, initiativeId, taskId) {
+    const task = strategicState.getTask(objectiveId, tacticId, initiativeId, taskId);
+    const initiative = strategicState.getInitiative(objectiveId, tacticId, initiativeId);
+    if (!task || !initiative) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    let resourceOptions = '<option value="">None</option>';
+    strategicState.resources.forEach(r => {
+        const selected = r.id === task.resourceId ? 'selected' : '';
+        resourceOptions += `<option value="${r.id}" ${selected}>${r.name}</option>`;
+    });
+
+    content.innerHTML = `
+        <h2>Edit Task / To-Do</h2>
+        <p class="form-subtitle">1-90 day action item for Initiative: ${initiative.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="taskTitle" placeholder="Enter task title" value="${task.title}">
+        </div>
+        <div class="form-group">
+            <label>Duration (Days):</label>
+            <input type="number" id="taskDuration" min="1" max="90" value="${task.durationDays}">
+        </div>
+        <div class="form-group">
+            <label>Resource:</label>
+            <select id="taskResource">${resourceOptions}</select>
+        </div>
+        <div class="form-group">
+            <label>Description (Optional):</label>
+            <textarea id="taskDescription" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${task.description || ''}</textarea>
+        </div>
+        <div class="form-actions">
+            <button onclick="updateTask(${objectiveId}, ${tacticId}, ${initiativeId}, ${taskId})" class="btn btn-primary">Update</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function updateTask(objectiveId, tacticId, initiativeId, taskId) {
+    const task = strategicState.getTask(objectiveId, tacticId, initiativeId, taskId);
+    if (!task) return;
+
+    const title = document.getElementById('taskTitle').value.trim();
+    const duration = parseInt(document.getElementById('taskDuration').value);
+    const resourceId = document.getElementById('taskResource').value ?
+                       parseInt(document.getElementById('taskResource').value) : null;
+    const description = document.getElementById('taskDescription').value.trim();
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    if (duration < 1 || duration > 90) {
+        alert('Duration must be between 1 and 90 days');
+        return;
+    }
+
+    task.title = title;
+    task.durationDays = duration;
+    task.resourceId = resourceId;
+    task.description = description;
+
+    closeModal();
+    renderHierarchy();
+    renderCanvas();
+    saveToLocalStorage();
 }
 
 // ===== UPDATE OPERATIONS =====
@@ -1076,6 +1357,10 @@ window.deleteTactic = deleteTactic;
 window.deleteInitiative = deleteInitiative;
 window.deleteTask = deleteTask;
 window.editItem = editItem;
+window.updateObjective = updateObjective;
+window.updateTactic = updateTactic;
+window.updateInitiative = updateInitiative;
+window.updateTask = updateTask;
 window.updateTaskProgress = updateTaskProgress;
 window.showAddResourceForm = showAddResourceForm;
 window.saveResource = saveResource;
