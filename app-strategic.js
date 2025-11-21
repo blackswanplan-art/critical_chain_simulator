@@ -2489,36 +2489,40 @@ function drawBufferChart() {
 
     systemicState.buffers.forEach((buffer, idx) => {
         const x = chartLeft + idx * bufferWidth + bufferWidth / 2;
-        const consumptionY = chartBottom - (buffer.consumption / 100) * chartHeight;
+        const penetrationY = chartBottom - (buffer.penetration / 100) * chartHeight;
+
+        // Get color based on status
+        let pointColor = '#4caf50'; // green
+        if (buffer.status === 'red') pointColor = '#f44336';
+        else if (buffer.status === 'yellow') pointColor = '#ff9800';
 
         // Draw point
-        ctx.fillStyle = buffer.getColorCode();
+        ctx.fillStyle = pointColor;
         ctx.beginPath();
-        ctx.arc(x, consumptionY, 6, 0, Math.PI * 2);
+        ctx.arc(x, penetrationY, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Buffer label
+        // Buffer label with ID and type
         ctx.fillStyle = '#333';
-        ctx.font = '11px Arial';
+        ctx.font = '10px Arial';
         ctx.textAlign = 'center';
-        const bufferLabel = buffer.type.charAt(0).toUpperCase() + buffer.type.slice(1);
-        ctx.fillText(bufferLabel, x, chartBottom + 20);
-        ctx.fillText(`${buffer.consumption.toFixed(0)}%`, x, chartBottom + 35);
+        ctx.fillText(buffer.id, x, chartBottom + 18);
+        ctx.fillText(`${buffer.penetration.toFixed(0)}%`, x, chartBottom + 30);
 
         // Connect with line if not first
         if (idx > 0) {
             const prevX = chartLeft + (idx - 1) * bufferWidth + bufferWidth / 2;
             const prevBuffer = systemicState.buffers[idx - 1];
-            const prevY = chartBottom - (prevBuffer.consumption / 100) * chartHeight;
+            const prevY = chartBottom - (prevBuffer.penetration / 100) * chartHeight;
 
             ctx.strokeStyle = '#999';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(prevX, prevY);
-            ctx.lineTo(x, consumptionY);
+            ctx.lineTo(x, penetrationY);
             ctx.stroke();
         }
     });
@@ -2808,33 +2812,56 @@ function scheduleProject() {
     console.log(`Scheduling ${allTasks.length} tasks with ${allResources.length} resources...`);
 
     try {
-        // Create scheduler instance
+        // Step 1: Run scheduling algorithm
         const scheduler = new CCPMScheduler(allTasks, allResources);
-
-        // Run scheduling algorithm
         const result = scheduler.calculateSchedule();
 
-        // Update system state with results
+        // Update system state with scheduling results
         systemicState.criticalChain = result.criticalChain;
+
+        // Step 2: Create and place buffers
+        console.log('Creating CCPM buffers...');
+        const bufferManager = new BufferManager(
+            allTasks,
+            allResources,
+            result.criticalChain,
+            result.feedingChains,
+            result.projectDuration
+        );
+
+        const buffers = bufferManager.insertAllBuffers();
+
+        // Update system state with buffers
+        systemicState.buffers = buffers;
+
+        // Get buffer summary
+        const bufferSummary = bufferManager.getBufferStatusSummary();
 
         // Show summary
         const criticalChainTaskTitles = result.criticalChain.map(t => t.title).join(', ');
-        const feedingChainCount = result.feedingChains.length;
 
-        alert(`✅ Project Scheduled Successfully!
+        alert(`✅ Project Scheduled with CCPM Buffers!
 
-Project Duration: ${result.projectDuration} days
+📊 PROJECT SCHEDULE:
+Duration: ${result.projectDuration} days (tasks only)
+With Buffers: ${result.projectDuration + (buffers.find(b => b.type === 'project')?.size || 0)} days
 
-Critical Chain: ${result.criticalChain.length} tasks
+🔴 CRITICAL CHAIN: ${result.criticalChain.length} tasks
 ${criticalChainTaskTitles}
 
-Feeding Chains: ${feedingChainCount}
+🔵 FEEDING CHAINS: ${result.feedingChains.length}
 
-All tasks now have scheduled start/end dates.
-Critical chain tasks are marked in red.
-Non-critical tasks use late-start scheduling.
+🛡️ BUFFERS CREATED: ${buffers.length} total
+  • Project Buffer: ${bufferSummary.byType.project} (protects completion date)
+  • Feeding Buffers: ${bufferSummary.byType.feeding} (protect from feeding chain delays)
+  • Resource Buffers: ${bufferSummary.byType.resource} (alert before constrained resources)
+  • Drum Buffers: ${bufferSummary.byType.drum} (protect constraint resource)
 
-View the Timeline or Calendar visualization to see the schedule.`);
+✅ All tasks scheduled with late-start optimization
+✅ Critical chain tasks marked in red
+✅ Buffers sized at 50% of aggregated safety time
+
+View Buffer Fever Chart to monitor buffer status.`);
 
         // Re-render everything
         renderHierarchy();
