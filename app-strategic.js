@@ -2004,6 +2004,9 @@ function renderCanvas() {
         case 'calendar':
             drawResourceCalendar();
             break;
+        case 'priority':
+            drawPriorityQueue();
+            break;
         default:
             drawTimeline();
     }
@@ -2271,6 +2274,121 @@ function drawLegend(x, y, colors) {
             y += 20;
         }
     });
+}
+
+function drawPriorityQueue() {
+    const padding = 60;
+    const leftMargin = 200;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Priority Queue - "What\'s My Next Task?"', padding, 40);
+
+    // Check if DBR system exists
+    if (!systemicState.drumBufferRope) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('Priority queue not yet created', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('Click "Schedule Project" to generate priority queue', canvas.width / 2, canvas.height / 2 + 25);
+        return;
+    }
+
+    if (systemicState.resources.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No resources defined', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    const dbr = systemicState.drumBufferRope;
+    let y = padding + 60;
+    const rowHeight = 120;
+
+    // Draw each resource and their next task
+    systemicState.resources.forEach((resource, idx) => {
+        if (y > canvas.height - padding) return; // Don't overflow
+
+        // Resource header
+        ctx.fillStyle = '#667eea';
+        ctx.fillRect(padding, y, canvas.width - padding * 2, 30);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${resource.getTypeIcon()} ${resource.name}`, padding + 15, y + 20);
+
+        // Get next task for this resource
+        const nextTaskInfo = dbr.getNextTaskForResource(resource.id);
+
+        y += 35;
+
+        if (!nextTaskInfo.task) {
+            // No task available
+            ctx.fillStyle = '#999';
+            ctx.font = '13px Arial';
+            ctx.fillText('✓ No tasks currently available', padding + 15, y + 20);
+            ctx.font = '11px Arial';
+            ctx.fillText(`Reason: ${nextTaskInfo.reason}`, padding + 15, y + 40);
+        } else {
+            const task = nextTaskInfo.task;
+
+            // Task title
+            ctx.fillStyle = task.isCriticalChain ? '#f44336' : '#333';
+            ctx.font = nextTaskInfo.isActive ? 'bold 14px Arial' : '13px Arial';
+            const statusPrefix = nextTaskInfo.isActive ? '🔴 CONTINUE: ' : '▶️ START: ';
+            ctx.fillText(`${statusPrefix}"${task.title}"`, padding + 15, y + 20);
+
+            // Priority reason
+            ctx.fillStyle = '#666';
+            ctx.font = '11px Arial';
+            ctx.fillText(`Priority: ${nextTaskInfo.reason}`, padding + 15, y + 40);
+
+            // Duration and schedule
+            const schedStart = task.scheduledStart !== null ? task.scheduledStart.toFixed(1) : '?';
+            const schedEnd = task.scheduledEnd !== null ? task.scheduledEnd.toFixed(1) : '?';
+            ctx.fillText(`Duration: ${task.ccpmDuration}d | Scheduled: Day ${schedStart} - ${schedEnd}`, padding + 15, y + 55);
+
+            // Buffer status if available
+            if (nextTaskInfo.bufferStatus) {
+                const bs = nextTaskInfo.bufferStatus;
+                let bufferColor = '#4caf50';
+                if (bs.status === 'red') bufferColor = '#f44336';
+                else if (bs.status === 'yellow') bufferColor = '#ff9800';
+
+                ctx.fillStyle = bufferColor;
+                ctx.fillRect(padding + 15, y + 60, 100, 20);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${bs.bufferId}: ${bs.penetration.toFixed(0)}%`, padding + 65, y + 73);
+                ctx.textAlign = 'left';
+
+                ctx.fillStyle = '#666';
+                ctx.font = '10px Arial';
+                ctx.fillText(`${bs.bufferType} buffer`, padding + 125, y + 73);
+            }
+        }
+
+        y += rowHeight;
+
+        // Separator line
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, y - 10);
+        ctx.lineTo(canvas.width - padding, y - 10);
+        ctx.stroke();
+    });
+
+    // Instructions at bottom
+    ctx.fillStyle = '#666';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Each resource shows their highest-priority task. Red = Critical Chain | Buffer status drives priority.', padding, canvas.height - 20);
 }
 
 // ===== VIEW SWITCHING =====
@@ -2834,6 +2952,18 @@ function scheduleProject() {
         // Update system state with buffers
         systemicState.buffers = buffers;
 
+        // Step 3: Create Drum-Buffer-Rope priority queue
+        console.log('Creating priority queue system...');
+        const drumBufferRope = new DrumBufferRope(
+            allTasks,
+            allResources,
+            buffers,
+            result.criticalChain
+        );
+
+        // Store DBR instance globally for UI access
+        systemicState.drumBufferRope = drumBufferRope;
+
         // Get buffer summary
         const bufferSummary = bufferManager.getBufferStatusSummary();
 
@@ -2860,8 +2990,9 @@ ${criticalChainTaskTitles}
 ✅ All tasks scheduled with late-start optimization
 ✅ Critical chain tasks marked in red
 ✅ Buffers sized at 50% of aggregated safety time
+✅ Priority queue created for all resources
 
-View Buffer Fever Chart to monitor buffer status.`);
+🎯 View Priority Queue tab to see "What's My Next Task?" for each resource.`);
 
         // Re-render everything
         renderHierarchy();
