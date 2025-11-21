@@ -1,0 +1,1085 @@
+// Critical Chain Simulator - Strategic Planning Edition v3.0
+// Hierarchical Strategic-to-Tactical Planning System
+
+// ===== HIERARCHICAL DATA CLASSES =====
+
+class Objective {
+    constructor(id, title, startYear, endYear) {
+        this.id = id;
+        this.title = title;
+        this.startYear = startYear;
+        this.endYear = endYear;
+        this.tactics = []; // Child tactics
+        this.progress = 0; // Auto-calculated from children
+        this.status = 'not_started';
+        this.description = '';
+    }
+
+    addTactic(tactic) {
+        if (this.tactics.length >= 3) {
+            throw new Error('Maximum 3 tactics per objective');
+        }
+        this.tactics.push(tactic);
+    }
+
+    calculateProgress() {
+        if (this.tactics.length === 0) return 0;
+        const sum = this.tactics.reduce((acc, t) => acc + t.calculateProgress(), 0);
+        this.progress = Math.round(sum / this.tactics.length);
+        return this.progress;
+    }
+
+    toString() {
+        return `📋 OBJECTIVE: ${this.title} (${this.startYear}-${this.endYear})`;
+    }
+}
+
+class Tactic {
+    constructor(id, title, startQuarter, endQuarter, objectiveId) {
+        this.id = id;
+        this.title = title;
+        this.startQuarter = startQuarter; // e.g., "2024-Q1"
+        this.endQuarter = endQuarter;     // e.g., "2025-Q4"
+        this.objectiveId = objectiveId;
+        this.initiatives = []; // Child initiatives
+        this.progress = 0;
+        this.status = 'not_started';
+        this.description = '';
+    }
+
+    addInitiative(initiative) {
+        if (this.initiatives.length >= 3) {
+            throw new Error('Maximum 3 initiatives per tactic');
+        }
+        this.initiatives.push(initiative);
+    }
+
+    calculateProgress() {
+        if (this.initiatives.length === 0) return 0;
+        const sum = this.initiatives.reduce((acc, i) => acc + i.calculateProgress(), 0);
+        this.progress = Math.round(sum / this.initiatives.length);
+        return this.progress;
+    }
+
+    toString() {
+        return `🎯 TACTIC/BOULDER: ${this.title} (${this.startQuarter} to ${this.endQuarter})`;
+    }
+}
+
+class Initiative {
+    constructor(id, title, startQuarter, durationQuarters, tacticId) {
+        this.id = id;
+        this.title = title;
+        this.startQuarter = startQuarter; // e.g., "2024-Q1"
+        this.durationQuarters = durationQuarters; // 1-5
+        this.tacticId = tacticId;
+        this.tasks = []; // Child tasks
+        this.progress = 0;
+        this.status = 'not_started';
+        this.description = '';
+        this.resourceId = null;
+    }
+
+    addTask(task) {
+        this.tasks.push(task);
+    }
+
+    calculateProgress() {
+        if (this.tasks.length === 0) return 0;
+        const sum = this.tasks.reduce((acc, t) => acc + t.progress, 0);
+        this.progress = Math.round(sum / this.tasks.length);
+        return this.progress;
+    }
+
+    toString() {
+        return `🚀 INITIATIVE/ROCK: ${this.title} (${this.durationQuarters}Q)`;
+    }
+}
+
+class StrategicTask {
+    constructor(id, title, durationDays, initiativeId, resourceId = null) {
+        this.id = id;
+        this.title = title;
+        this.durationDays = durationDays; // 1-90 days
+        this.initiativeId = initiativeId;
+        this.resourceId = resourceId;
+        this.progress = 0; // 0-100%
+        this.status = 'not_started';
+        this.description = '';
+        this.predecessors = [];
+        this.actualStart = null;
+        this.actualEnd = null;
+    }
+
+    toString() {
+        return `✓ TASK/TO-DO: ${this.title} (${this.durationDays}d)`;
+    }
+}
+
+class Resource {
+    constructor(id, name) {
+        this.id = id;
+        this.name = name;
+    }
+}
+
+// ===== STRATEGIC PROJECT STATE =====
+
+class StrategicProjectState {
+    constructor() {
+        this.projectName = 'Strategic Plan';
+        this.objectives = [];
+        this.resources = [];
+        this.currentDate = new Date();
+        this.createdDate = new Date().toISOString();
+        this.nextObjectiveId = 1;
+        this.nextTacticId = 1;
+        this.nextInitiativeId = 1;
+        this.nextTaskId = 1;
+        this.nextResourceId = 1;
+    }
+
+    // Objective operations
+    addObjective(title, startYear, endYear) {
+        if (this.objectives.length >= 3) {
+            throw new Error('Maximum 3 objectives allowed');
+        }
+        const obj = new Objective(this.nextObjectiveId++, title, startYear, endYear);
+        this.objectives.push(obj);
+        return obj;
+    }
+
+    getObjective(id) {
+        return this.objectives.find(o => o.id === id);
+    }
+
+    deleteObjective(id) {
+        this.objectives = this.objectives.filter(o => o.id !== id);
+    }
+
+    // Tactic operations
+    addTactic(title, startQuarter, endQuarter, objectiveId) {
+        const objective = this.getObjective(objectiveId);
+        if (!objective) throw new Error('Objective not found');
+
+        const tactic = new Tactic(this.nextTacticId++, title, startQuarter, endQuarter, objectiveId);
+        objective.addTactic(tactic);
+        return tactic;
+    }
+
+    getTactic(objectiveId, tacticId) {
+        const objective = this.getObjective(objectiveId);
+        if (!objective) return null;
+        return objective.tactics.find(t => t.id === tacticId);
+    }
+
+    getAllTactics() {
+        return this.objectives.flatMap(o => o.tactics);
+    }
+
+    deleteTactic(objectiveId, tacticId) {
+        const objective = this.getObjective(objectiveId);
+        if (objective) {
+            objective.tactics = objective.tactics.filter(t => t.id !== tacticId);
+        }
+    }
+
+    // Initiative operations
+    addInitiative(title, startQuarter, durationQuarters, objectiveId, tacticId) {
+        const objective = this.getObjective(objectiveId);
+        if (!objective) throw new Error('Objective not found');
+
+        const tactic = objective.tactics.find(t => t.id === tacticId);
+        if (!tactic) throw new Error('Tactic not found');
+
+        const initiative = new Initiative(this.nextInitiativeId++, title, startQuarter, durationQuarters, tacticId);
+        tactic.addInitiative(initiative);
+        return initiative;
+    }
+
+    getInitiative(objectiveId, tacticId, initiativeId) {
+        const tactic = this.getTactic(objectiveId, tacticId);
+        if (!tactic) return null;
+        return tactic.initiatives.find(i => i.id === initiativeId);
+    }
+
+    getAllInitiatives() {
+        return this.objectives.flatMap(o =>
+            o.tactics.flatMap(t => t.initiatives)
+        );
+    }
+
+    deleteInitiative(objectiveId, tacticId, initiativeId) {
+        const tactic = this.getTactic(objectiveId, tacticId);
+        if (tactic) {
+            tactic.initiatives = tactic.initiatives.filter(i => i.id !== initiativeId);
+        }
+    }
+
+    // Task operations
+    addTask(title, durationDays, objectiveId, tacticId, initiativeId, resourceId = null) {
+        const initiative = this.getInitiative(objectiveId, tacticId, initiativeId);
+        if (!initiative) throw new Error('Initiative not found');
+
+        if (durationDays < 1 || durationDays > 90) {
+            throw new Error('Task duration must be between 1 and 90 days');
+        }
+
+        const task = new StrategicTask(this.nextTaskId++, title, durationDays, initiativeId, resourceId);
+        initiative.addTask(task);
+        return task;
+    }
+
+    getTask(objectiveId, tacticId, initiativeId, taskId) {
+        const initiative = this.getInitiative(objectiveId, tacticId, initiativeId);
+        if (!initiative) return null;
+        return initiative.tasks.find(t => t.id === taskId);
+    }
+
+    getAllTasks() {
+        return this.objectives.flatMap(o =>
+            o.tactics.flatMap(t =>
+                t.initiatives.flatMap(i => i.tasks)
+            )
+        );
+    }
+
+    deleteTask(objectiveId, tacticId, initiativeId, taskId) {
+        const initiative = this.getInitiative(objectiveId, tacticId, initiativeId);
+        if (initiative) {
+            initiative.tasks = initiative.tasks.filter(t => t.id !== taskId);
+        }
+    }
+
+    // Resource operations
+    addResource(name) {
+        const resource = new Resource(this.nextResourceId++, name);
+        this.resources.push(resource);
+        return resource;
+    }
+
+    deleteResource(id) {
+        this.resources = this.resources.filter(r => r.id !== id);
+    }
+
+    // Progress calculation
+    calculateAllProgress() {
+        this.objectives.forEach(obj => obj.calculateProgress());
+    }
+
+    // Serialization
+    toJSON() {
+        return {
+            projectName: this.projectName,
+            currentDate: this.currentDate,
+            objectives: this.objectives,
+            resources: this.resources,
+            nextObjectiveId: this.nextObjectiveId,
+            nextTacticId: this.nextTacticId,
+            nextInitiativeId: this.nextInitiativeId,
+            nextTaskId: this.nextTaskId,
+            nextResourceId: this.nextResourceId,
+            createdDate: this.createdDate,
+            modifiedDate: new Date().toISOString()
+        };
+    }
+
+    fromJSON(data) {
+        this.projectName = data.projectName;
+        this.currentDate = new Date(data.currentDate);
+        this.nextObjectiveId = data.nextObjectiveId || 1;
+        this.nextTacticId = data.nextTacticId || 1;
+        this.nextInitiativeId = data.nextInitiativeId || 1;
+        this.nextTaskId = data.nextTaskId || 1;
+        this.nextResourceId = data.nextResourceId || 1;
+        this.createdDate = data.createdDate;
+
+        // Reconstruct resources
+        this.resources = (data.resources || []).map(r => {
+            const resource = new Resource(r.id, r.name);
+            return resource;
+        });
+
+        // Reconstruct hierarchy
+        this.objectives = (data.objectives || []).map(objData => {
+            const objective = new Objective(objData.id, objData.title, objData.startYear, objData.endYear);
+            objective.description = objData.description || '';
+            objective.status = objData.status || 'not_started';
+
+            objective.tactics = (objData.tactics || []).map(tacData => {
+                const tactic = new Tactic(tacData.id, tacData.title, tacData.startQuarter, tacData.endQuarter, tacData.objectiveId);
+                tactic.description = tacData.description || '';
+                tactic.status = tacData.status || 'not_started';
+
+                tactic.initiatives = (tacData.initiatives || []).map(initData => {
+                    const initiative = new Initiative(initData.id, initData.title, initData.startQuarter, initData.durationQuarters, initData.tacticId);
+                    initiative.description = initData.description || '';
+                    initiative.status = initData.status || 'not_started';
+                    initiative.resourceId = initData.resourceId;
+
+                    initiative.tasks = (initData.tasks || []).map(taskData => {
+                        const task = new StrategicTask(taskData.id, taskData.title, taskData.durationDays, taskData.initiativeId, taskData.resourceId);
+                        task.progress = taskData.progress || 0;
+                        task.status = taskData.status || 'not_started';
+                        task.description = taskData.description || '';
+                        task.predecessors = taskData.predecessors || [];
+                        task.actualStart = taskData.actualStart;
+                        task.actualEnd = taskData.actualEnd;
+                        return task;
+                    });
+
+                    return initiative;
+                });
+
+                return tactic;
+            });
+
+            return objective;
+        });
+
+        this.calculateAllProgress();
+    }
+}
+
+// ===== GLOBAL STATE =====
+
+let strategicState = new StrategicProjectState();
+let canvas, ctx;
+let scale = 1;
+let viewMode = 'all'; // all, objectives, tactics, initiatives, tasks
+let selectedItem = null;
+let editingItem = null;
+let autoSaveInterval = null;
+
+// ===== INITIALIZATION =====
+
+window.addEventListener('load', () => {
+    canvas = document.getElementById('strategicCanvas');
+    if (canvas) {
+        ctx = canvas.getContext('2d');
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        canvas.addEventListener('click', handleCanvasClick);
+    }
+
+    loadFromLocalStorage();
+    startAutoSave();
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+});
+
+function resizeCanvas() {
+    if (!canvas) return;
+    const wrapper = canvas.parentElement;
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    renderCanvas();
+}
+
+// ===== PERSISTENCE =====
+
+function saveToLocalStorage() {
+    try {
+        const data = strategicState.toJSON();
+        localStorage.setItem('strategic_plan_v3', JSON.stringify(data));
+        console.log('Strategic plan auto-saved');
+    } catch (e) {
+        console.error('Failed to save:', e);
+    }
+}
+
+function loadFromLocalStorage() {
+    try {
+        const saved = localStorage.getItem('strategic_plan_v3');
+        if (saved) {
+            const data = JSON.parse(saved);
+            strategicState.fromJSON(data);
+            console.log('Strategic plan loaded');
+        }
+    } catch (e) {
+        console.error('Failed to load:', e);
+    }
+}
+
+function startAutoSave() {
+    autoSaveInterval = setInterval(() => {
+        saveToLocalStorage();
+    }, 10000);
+}
+
+function exportToJSON() {
+    const data = strategicState.toJSON();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${strategicState.projectName.replace(/\s+/g, '_')}_strategic_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importFromJSON() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                strategicState.fromJSON(data);
+                renderHierarchy();
+                renderCanvas();
+                updateStats();
+                saveToLocalStorage();
+                alert('Strategic plan imported successfully!');
+            } catch (err) {
+                alert('Failed to import: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+// ===== UI RENDERING =====
+
+function renderHierarchy() {
+    const container = document.getElementById('hierarchyTree');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (strategicState.objectives.length === 0) {
+        container.innerHTML = '<div class="empty-state">No objectives yet. Add your first strategic objective to begin.</div>';
+        return;
+    }
+
+    strategicState.objectives.forEach(objective => {
+        const objElement = createObjectiveElement(objective);
+        container.appendChild(objElement);
+    });
+}
+
+function createObjectiveElement(objective) {
+    const div = document.createElement('div');
+    div.className = 'hierarchy-item objective-item';
+    div.innerHTML = `
+        <div class="item-header">
+            <span class="item-icon">📋</span>
+            <span class="item-title" onclick="editItem('objective', ${objective.id})">${objective.title}</span>
+            <span class="item-timeline">${objective.startYear}-${objective.endYear}</span>
+            <span class="item-progress">${objective.progress}%</span>
+            <button onclick="deleteObjective(${objective.id})" class="btn-remove">×</button>
+        </div>
+        <div class="item-children" id="objective-${objective.id}-children"></div>
+        <button onclick="showAddTacticForm(${objective.id})" class="btn-add-child">+ Add Tactic/Boulder</button>
+    `;
+
+    const childrenContainer = div.querySelector(`#objective-${objective.id}-children`);
+    objective.tactics.forEach(tactic => {
+        childrenContainer.appendChild(createTacticElement(tactic, objective.id));
+    });
+
+    return div;
+}
+
+function createTacticElement(tactic, objectiveId) {
+    const div = document.createElement('div');
+    div.className = 'hierarchy-item tactic-item';
+    div.innerHTML = `
+        <div class="item-header">
+            <span class="item-icon">🎯</span>
+            <span class="item-title" onclick="editItem('tactic', ${objectiveId}, ${tactic.id})">${tactic.title}</span>
+            <span class="item-timeline">${tactic.startQuarter} to ${tactic.endQuarter}</span>
+            <span class="item-progress">${tactic.progress}%</span>
+            <button onclick="deleteTactic(${objectiveId}, ${tactic.id})" class="btn-remove">×</button>
+        </div>
+        <div class="item-children" id="tactic-${tactic.id}-children"></div>
+        <button onclick="showAddInitiativeForm(${objectiveId}, ${tactic.id})" class="btn-add-child">+ Add Initiative/Rock</button>
+    `;
+
+    const childrenContainer = div.querySelector(`#tactic-${tactic.id}-children`);
+    tactic.initiatives.forEach(initiative => {
+        childrenContainer.appendChild(createInitiativeElement(initiative, objectiveId, tactic.id));
+    });
+
+    return div;
+}
+
+function createInitiativeElement(initiative, objectiveId, tacticId) {
+    const div = document.createElement('div');
+    div.className = 'hierarchy-item initiative-item';
+    div.innerHTML = `
+        <div class="item-header">
+            <span class="item-icon">🚀</span>
+            <span class="item-title" onclick="editItem('initiative', ${objectiveId}, ${tacticId}, ${initiative.id})">${initiative.title}</span>
+            <span class="item-timeline">${initiative.durationQuarters}Q starting ${initiative.startQuarter}</span>
+            <span class="item-progress">${initiative.progress}%</span>
+            <button onclick="deleteInitiative(${objectiveId}, ${tacticId}, ${initiative.id})" class="btn-remove">×</button>
+        </div>
+        <div class="item-children" id="initiative-${initiative.id}-children"></div>
+        <button onclick="showAddTaskForm(${objectiveId}, ${tacticId}, ${initiative.id})" class="btn-add-child">+ Add Task/To-Do</button>
+    `;
+
+    const childrenContainer = div.querySelector(`#initiative-${initiative.id}-children`);
+    initiative.tasks.forEach(task => {
+        childrenContainer.appendChild(createTaskElement(task, objectiveId, tacticId, initiative.id));
+    });
+
+    return div;
+}
+
+function createTaskElement(task, objectiveId, tacticId, initiativeId) {
+    const div = document.createElement('div');
+    div.className = 'hierarchy-item task-item';
+    div.innerHTML = `
+        <div class="item-header">
+            <span class="item-icon">✓</span>
+            <span class="item-title" onclick="editItem('task', ${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id})">${task.title}</span>
+            <span class="item-timeline">${task.durationDays} days</span>
+            <div class="task-progress-inline">
+                <input type="range" min="0" max="100" value="${task.progress}"
+                       onchange="updateTaskProgress(${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id}, this.value)"
+                       onclick="event.stopPropagation()">
+                <span>${task.progress}%</span>
+            </div>
+            <button onclick="deleteTask(${objectiveId}, ${tacticId}, ${initiativeId}, ${task.id})" class="btn-remove">×</button>
+        </div>
+    `;
+
+    return div;
+}
+
+// ===== CRUD OPERATIONS =====
+
+// Add operations (showing forms)
+function showAddObjectiveForm() {
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    if (strategicState.objectives.length >= 3) {
+        alert('Maximum 3 objectives allowed');
+        return;
+    }
+
+    content.innerHTML = `
+        <h2>Add Objective (Strategic Goal)</h2>
+        <p class="form-subtitle">3-5 year timeline</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="objTitle" placeholder="Enter objective title">
+        </div>
+        <div class="form-group">
+            <label>Start Year:</label>
+            <input type="number" id="objStartYear" value="${new Date().getFullYear()}" min="2020" max="2050">
+        </div>
+        <div class="form-group">
+            <label>End Year:</label>
+            <input type="number" id="objEndYear" value="${new Date().getFullYear() + 3}" min="2020" max="2050">
+        </div>
+        <div class="form-actions">
+            <button onclick="saveObjective()" class="btn btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function saveObjective() {
+    const title = document.getElementById('objTitle').value.trim();
+    const startYear = parseInt(document.getElementById('objStartYear').value);
+    const endYear = parseInt(document.getElementById('objEndYear').value);
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    if (endYear <= startYear) {
+        alert('End year must be after start year');
+        return;
+    }
+
+    if (endYear - startYear < 3 || endYear - startYear > 5) {
+        alert('Objectives should be 3-5 years');
+        return;
+    }
+
+    try {
+        strategicState.addObjective(title, startYear, endYear);
+        closeModal();
+        renderHierarchy();
+        renderCanvas();
+        updateStats();
+        saveToLocalStorage();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// Continue implementing remaining CRUD operations...
+// (This is part 1 of the file - continuing in next block)
+
+// Make functions globally accessible
+window.showAddObjectiveForm = showAddObjectiveForm;
+window.saveObjective = saveObjective;
+window.exportToJSON = exportToJSON;
+window.importFromJSON = importFromJSON;
+
+// ===== TACTIC CRUD =====
+
+function showAddTacticForm(objectiveId) {
+    const objective = strategicState.getObjective(objectiveId);
+    if (!objective) return;
+
+    if (objective.tactics.length >= 3) {
+        alert('Maximum 3 tactics per objective');
+        return;
+    }
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Add Tactic / Boulder</h2>
+        <p class="form-subtitle">1-2 year timeline for Objective: ${objective.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="tacticTitle" placeholder="Enter tactic title">
+        </div>
+        <div class="form-group">
+            <label>Start Quarter:</label>
+            <input type="text" id="tacticStartQ" placeholder="e.g., 2024-Q1" value="${objective.startYear}-Q1">
+        </div>
+        <div class="form-group">
+            <label>End Quarter:</label>
+            <input type="text" id="tacticEndQ" placeholder="e.g., 2025-Q4" value="${objective.startYear + 1}-Q4">
+        </div>
+        <div class="form-actions">
+            <button onclick="saveTactic(${objectiveId})" class="btn btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function saveTactic(objectiveId) {
+    const title = document.getElementById('tacticTitle').value.trim();
+    const startQ = document.getElementById('tacticStartQ').value.trim();
+    const endQ = document.getElementById('tacticEndQ').value.trim();
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    try {
+        strategicState.addTactic(title, startQ, endQ, objectiveId);
+        closeModal();
+        renderHierarchy();
+        renderCanvas();
+        updateStats();
+        saveToLocalStorage();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// ===== INITIATIVE CRUD =====
+
+function showAddInitiativeForm(objectiveId, tacticId) {
+    const tactic = strategicState.getTactic(objectiveId, tacticId);
+    if (!tactic) return;
+
+    if (tactic.initiatives.length >= 3) {
+        alert('Maximum 3 initiatives per tactic');
+        return;
+    }
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Add Initiative / Action Plan / Rock</h2>
+        <p class="form-subtitle">1-5 quarter project for Tactic: ${tactic.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="initTitle" placeholder="Enter initiative title">
+        </div>
+        <div class="form-group">
+            <label>Start Quarter:</label>
+            <input type="text" id="initStartQ" placeholder="e.g., 2024-Q1" value="${tactic.startQuarter}">
+        </div>
+        <div class="form-group">
+            <label>Duration (Quarters):</label>
+            <input type="number" id="initDuration" min="1" max="5" value="2">
+        </div>
+        <div class="form-actions">
+            <button onclick="saveInitiative(${objectiveId}, ${tacticId})" class="btn btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function saveInitiative(objectiveId, tacticId) {
+    const title = document.getElementById('initTitle').value.trim();
+    const startQ = document.getElementById('initStartQ').value.trim();
+    const duration = parseInt(document.getElementById('initDuration').value);
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    if (duration < 1 || duration > 5) {
+        alert('Duration must be 1-5 quarters');
+        return;
+    }
+
+    try {
+        strategicState.addInitiative(title, startQ, duration, objectiveId, tacticId);
+        closeModal();
+        renderHierarchy();
+        renderCanvas();
+        updateStats();
+        saveToLocalStorage();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// ===== TASK CRUD =====
+
+function showAddTaskForm(objectiveId, tacticId, initiativeId) {
+    const initiative = strategicState.getInitiative(objectiveId, tacticId, initiativeId);
+    if (!initiative) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    let resourceOptions = '<option value="">None</option>';
+    strategicState.resources.forEach(r => {
+        resourceOptions += `<option value="${r.id}">${r.name}</option>`;
+    });
+
+    content.innerHTML = `
+        <h2>Add Task / To-Do</h2>
+        <p class="form-subtitle">1-90 day action item for Initiative: ${initiative.title}</p>
+        <div class="form-group">
+            <label>Title:</label>
+            <input type="text" id="taskTitle" placeholder="Enter task title">
+        </div>
+        <div class="form-group">
+            <label>Duration (Days):</label>
+            <input type="number" id="taskDuration" min="1" max="90" value="5">
+        </div>
+        <div class="form-group">
+            <label>Resource (Optional):</label>
+            <select id="taskResource">${resourceOptions}</select>
+        </div>
+        <div class="form-actions">
+            <button onclick="saveTask(${objectiveId}, ${tacticId}, ${initiativeId})" class="btn btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function saveTask(objectiveId, tacticId, initiativeId) {
+    const title = document.getElementById('taskTitle').value.trim();
+    const duration = parseInt(document.getElementById('taskDuration').value);
+    const resourceId = document.getElementById('taskResource').value ? 
+                       parseInt(document.getElementById('taskResource').value) : null;
+
+    if (!title) {
+        alert('Please enter a title');
+        return;
+    }
+
+    try {
+        strategicState.addTask(title, duration, objectiveId, tacticId, initiativeId, resourceId);
+        closeModal();
+        renderHierarchy();
+        renderCanvas();
+        updateStats();
+        saveToLocalStorage();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// ===== DELETE OPERATIONS =====
+
+function deleteObjective(id) {
+    if (!confirm('Delete this objective and all its tactics, initiatives, and tasks?')) return;
+    
+    strategicState.deleteObjective(id);
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+function deleteTactic(objectiveId, tacticId) {
+    if (!confirm('Delete this tactic and all its initiatives and tasks?')) return;
+    
+    strategicState.deleteTactic(objectiveId, tacticId);
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+function deleteInitiative(objectiveId, tacticId, initiativeId) {
+    if (!confirm('Delete this initiative and all its tasks?')) return;
+    
+    strategicState.deleteInitiative(objectiveId, tacticId, initiativeId);
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+function deleteTask(objectiveId, tacticId, initiativeId, taskId) {
+    if (!confirm('Delete this task?')) return;
+    
+    strategicState.deleteTask(objectiveId, tacticId, initiativeId, taskId);
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+// ===== EDIT OPERATIONS =====
+
+function editItem(type, ...ids) {
+    // Implementation for editing existing items
+    console.log('Edit', type, ids);
+    // TODO: Show edit form with existing values
+}
+
+// ===== UPDATE OPERATIONS =====
+
+function updateTaskProgress(objectiveId, tacticId, initiativeId, taskId, progress) {
+    const task = strategicState.getTask(objectiveId, tacticId, initiativeId, taskId);
+    if (!task) return;
+
+    task.progress = parseInt(progress);
+
+    if (task.progress > 0 && task.status === 'not_started') {
+        task.status = 'in_progress';
+    }
+    if (task.progress === 100) {
+        task.status = 'completed';
+    }
+
+    strategicState.calculateAllProgress();
+    renderHierarchy();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+// ===== RESOURCES =====
+
+function showAddResourceForm() {
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Add Resource</h2>
+        <div class="form-group">
+            <label>Name:</label>
+            <input type="text" id="resourceName" placeholder="Enter resource name">
+        </div>
+        <div class="form-actions">
+            <button onclick="saveResource()" class="btn btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function saveResource() {
+    const name = document.getElementById('resourceName').value.trim();
+    if (!name) {
+        alert('Please enter a name');
+        return;
+    }
+
+    strategicState.addResource(name);
+    closeModal();
+    renderResourceList();
+    saveToLocalStorage();
+}
+
+function renderResourceList() {
+    const list = document.getElementById('resourceList');
+    if (!list) return;
+
+    list.innerHTML = '';
+    strategicState.resources.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'resource-item';
+        div.innerHTML = `
+            <span>${r.name}</span>
+            <button onclick="deleteResource(${r.id})" class="btn-remove">×</button>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function deleteResource(id) {
+    if (!confirm('Delete this resource?')) return;
+    strategicState.deleteResource(id);
+    renderResourceList();
+    saveToLocalStorage();
+}
+
+// ===== CANVAS RENDERING =====
+
+function renderCanvas() {
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#FAFAFA';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (strategicState.objectives.length === 0) {
+        drawEmptyState();
+        return;
+    }
+
+    // Simple timeline visualization
+    drawTimeline();
+}
+
+function drawEmptyState() {
+    ctx.fillStyle = '#666';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Add objectives to see strategic timeline', canvas.width / 2, canvas.height / 2);
+}
+
+function drawTimeline() {
+    const padding = 40;
+    const rowHeight = 60;
+    let y = padding;
+
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+
+    strategicState.objectives.forEach((obj, idx) => {
+        // Draw objective bar
+        ctx.fillStyle = '#667eea';
+        ctx.fillRect(padding, y, 400, 40);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${obj.title} (${obj.progress}%)`, padding + 10, y + 25);
+
+        y += rowHeight;
+    });
+}
+
+// ===== UTILITY =====
+
+function closeModal() {
+    const modal = document.getElementById('editModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function handleCanvasClick(e) {
+    // Handle canvas interactions
+}
+
+function updateStats() {
+    const stats = {
+        objectives: strategicState.objectives.length,
+        tactics: strategicState.getAllTactics().length,
+        initiatives: strategicState.getAllInitiatives().length,
+        tasks: strategicState.getAllTasks().length
+    };
+
+    if (document.getElementById('statObjectives')) {
+        document.getElementById('statObjectives').textContent = stats.objectives;
+    }
+    if (document.getElementById('statTactics')) {
+        document.getElementById('statTactics').textContent = stats.tactics;
+    }
+    if (document.getElementById('statInitiatives')) {
+        document.getElementById('statInitiatives').textContent = stats.initiatives;
+    }
+    if (document.getElementById('statTasks')) {
+        document.getElementById('statTasks').textContent = stats.tasks;
+    }
+}
+
+function loadExamplePlan() {
+    // Example strategic plan
+    strategicState = new StrategicProjectState();
+    strategicState.projectName = "Company Growth Strategy 2024-2027";
+
+    // Objective 1
+    const obj1 = strategicState.addObjective("Expand Market Share", 2024, 2027);
+    const tac1 = strategicState.addTactic("Launch New Product Line", "2024-Q1", "2025-Q4", obj1.id);
+    const init1 = strategicState.addInitiative("Develop MVP", "2024-Q1", 2, obj1.id, tac1.id);
+    strategicState.addTask("Market Research", 30, obj1.id, tac1.id, init1.id);
+    strategicState.addTask("Design Prototype", 45, obj1.id, tac1.id, init1.id);
+
+    // Objective 2
+    const obj2 = strategicState.addObjective("Improve Operational Efficiency", 2024, 2026);
+    const tac2 = strategicState.addTactic("Implement Automation", "2024-Q2", "2025-Q2", obj2.id);
+    const init2 = strategicState.addInitiative("Deploy AI Tools", "2024-Q2", 3, obj2.id, tac2.id);
+    strategicState.addTask("Evaluate Vendors", 20, obj2.id, tac2.id, init2.id);
+    strategicState.addTask("Pilot Program", 60, obj2.id, tac2.id, init2.id);
+
+    renderHierarchy();
+    renderResourceList();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+function clearAll() {
+    if (!confirm('Clear entire strategic plan?')) return;
+
+    strategicState = new StrategicProjectState();
+    renderHierarchy();
+    renderResourceList();
+    renderCanvas();
+    updateStats();
+    saveToLocalStorage();
+}
+
+// Make functions globally accessible
+window.showAddTacticForm = showAddTacticForm;
+window.saveTactic = saveTactic;
+window.showAddInitiativeForm = showAddInitiativeForm;
+window.saveInitiative = saveInitiative;
+window.showAddTaskForm = showAddTaskForm;
+window.saveTask = saveTask;
+window.deleteObjective = deleteObjective;
+window.deleteTactic = deleteTactic;
+window.deleteInitiative = deleteInitiative;
+window.deleteTask = deleteTask;
+window.editItem = editItem;
+window.updateTaskProgress = updateTaskProgress;
+window.showAddResourceForm = showAddResourceForm;
+window.saveResource = saveResource;
+window.deleteResource = deleteResource;
+window.closeModal = closeModal;
+window.loadExamplePlan = loadExamplePlan;
+window.clearAll = clearAll;
