@@ -619,6 +619,7 @@ let systemicState = new SystemicProjectState();
 let canvas, ctx;
 let scale = 1;
 let viewMode = 'all'; // all, objectives, tactics, initiatives, tasks
+let currentView = 'timeline'; // timeline, resourceLoad, buffers, calendar
 let selectedItem = null;
 let editingItem = null;
 let autoSaveInterval = null;
@@ -1725,8 +1726,23 @@ function renderCanvas() {
         return;
     }
 
-    // Simple timeline visualization
-    drawTimeline();
+    // Render based on current view
+    switch (currentView) {
+        case 'timeline':
+            drawTimeline();
+            break;
+        case 'resourceLoad':
+            drawResourceLoad();
+            break;
+        case 'buffers':
+            drawBufferChart();
+            break;
+        case 'calendar':
+            drawResourceCalendar();
+            break;
+        default:
+            drawTimeline();
+    }
 }
 
 function drawEmptyState() {
@@ -1993,6 +2009,467 @@ function drawLegend(x, y, colors) {
     });
 }
 
+// ===== VIEW SWITCHING =====
+
+function switchView(view) {
+    currentView = view;
+
+    // Update tab button states
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    // Re-render canvas
+    renderCanvas();
+}
+
+// ===== ADDITIONAL VISUALIZATIONS =====
+
+function drawResourceLoad() {
+    const padding = 60;
+    const leftMargin = 200;
+    const chartWidth = canvas.width - leftMargin - padding * 2;
+    const chartHeight = canvas.height - padding * 2;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Resource Utilization', padding, 40);
+
+    // Calculate resource loads
+    const resourceLoads = systemicState.calculateResourceLoad();
+
+    if (resourceLoads.size === 0 || systemicState.resources.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No resources assigned to tasks yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Prepare data
+    const resourceData = [];
+    systemicState.resources.forEach(resource => {
+        const load = resourceLoads.get(resource.id) || { utilizationPercent: 0, totalDays: 0 };
+        resourceData.push({
+            name: resource.name,
+            icon: resource.getTypeIcon(),
+            utilization: Math.min(100, load.utilizationPercent),
+            totalDays: load.totalDays,
+            capacity: resource.getEffectiveCapacity() * 90, // 90-day window
+            isDrum: resource.isDrumResource
+        });
+    });
+
+    // Sort by utilization
+    resourceData.sort((a, b) => b.utilization - a.utilization);
+
+    const barHeight = 30;
+    const barGap = 15;
+    const maxBarWidth = chartWidth - 100;
+    let y = padding + 60;
+
+    // Draw bars
+    resourceData.forEach((data, idx) => {
+        if (y + barHeight > canvas.height - padding) return; // Don't overflow
+
+        // Resource label
+        ctx.fillStyle = '#333';
+        ctx.font = '13px Arial';
+        ctx.textAlign = 'right';
+        const label = `${data.icon} ${data.name}`;
+        ctx.fillText(label, leftMargin - 10, y + barHeight / 2 + 5);
+
+        // Bar background
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(leftMargin, y, maxBarWidth, barHeight);
+
+        // Utilization bar
+        const barWidth = (data.utilization / 100) * maxBarWidth;
+        let barColor = '#4caf50'; // Green
+        if (data.utilization >= 90) barColor = '#f44336'; // Red (overloaded)
+        else if (data.utilization >= 75) barColor = '#ff9800'; // Orange
+
+        ctx.fillStyle = barColor;
+        ctx.fillRect(leftMargin, y, barWidth, barHeight);
+
+        // Utilization percentage
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        if (barWidth > 50) {
+            ctx.fillText(`${data.utilization.toFixed(1)}%`, leftMargin + 10, y + barHeight / 2 + 5);
+        } else {
+            ctx.fillStyle = '#333';
+            ctx.fillText(`${data.utilization.toFixed(1)}%`, leftMargin + barWidth + 10, y + barHeight / 2 + 5);
+        }
+
+        // Drum indicator
+        if (data.isDrum) {
+            ctx.fillStyle = '#9c27b0';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('DRUM', leftMargin + maxBarWidth + 50, y + barHeight / 2 + 5);
+        }
+
+        // Border
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(leftMargin, y, maxBarWidth, barHeight);
+
+        y += barHeight + barGap;
+    });
+
+    // Legend
+    y = canvas.height - 40;
+    const legendItems = [
+        { color: '#4caf50', label: '<75% Normal' },
+        { color: '#ff9800', label: '75-90% High' },
+        { color: '#f44336', label: '>90% Overloaded' }
+    ];
+
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    let legendX = padding;
+    legendItems.forEach(item => {
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX, y, 15, 15);
+        ctx.strokeStyle = '#666';
+        ctx.strokeRect(legendX, y, 15, 15);
+        ctx.fillStyle = '#666';
+        ctx.fillText(item.label, legendX + 20, y + 12);
+        legendX += 150;
+    });
+}
+
+function drawBufferChart() {
+    const padding = 60;
+    const chartWidth = canvas.width - padding * 2;
+    const chartHeight = canvas.height - padding * 2 - 50;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Buffer Fever Chart', padding, 40);
+
+    if (systemicState.buffers.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No buffers defined yet', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('Buffers protect the critical chain from delays', canvas.width / 2, canvas.height / 2 + 25);
+        return;
+    }
+
+    // Chart area
+    const chartTop = padding + 50;
+    const chartBottom = chartTop + chartHeight;
+    const chartLeft = padding + 100;
+    const chartRight = chartLeft + (chartWidth - 100);
+
+    // Draw zones (Green, Yellow, Red)
+    const greenZone = chartHeight * 0.33;
+    const yellowZone = chartHeight * 0.33;
+    const redZone = chartHeight * 0.34;
+
+    // Red zone (top)
+    ctx.fillStyle = 'rgba(244, 67, 54, 0.15)';
+    ctx.fillRect(chartLeft, chartTop, chartRight - chartLeft, redZone);
+
+    // Yellow zone (middle)
+    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+    ctx.fillRect(chartLeft, chartTop + redZone, chartRight - chartLeft, yellowZone);
+
+    // Green zone (bottom)
+    ctx.fillStyle = 'rgba(76, 175, 80, 0.15)';
+    ctx.fillRect(chartLeft, chartTop + redZone + yellowZone, chartRight - chartLeft, greenZone);
+
+    // Y-axis
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, chartTop);
+    ctx.lineTo(chartLeft, chartBottom);
+    ctx.stroke();
+
+    // X-axis
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, chartBottom);
+    ctx.lineTo(chartRight, chartBottom);
+    ctx.stroke();
+
+    // Y-axis labels
+    ctx.fillStyle = '#666';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('100%', chartLeft - 10, chartTop + 5);
+    ctx.fillText('66%', chartLeft - 10, chartTop + redZone + 5);
+    ctx.fillText('33%', chartLeft - 10, chartTop + redZone + yellowZone + 5);
+    ctx.fillText('0%', chartLeft - 10, chartBottom + 5);
+
+    // Draw zone labels
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#f44336';
+    ctx.fillText('RED ZONE', chartRight + 10, chartTop + redZone / 2);
+    ctx.fillStyle = '#ff9800';
+    ctx.fillText('YELLOW ZONE', chartRight + 10, chartTop + redZone + yellowZone / 2);
+    ctx.fillStyle = '#4caf50';
+    ctx.fillText('GREEN ZONE', chartRight + 10, chartTop + redZone + yellowZone + greenZone / 2);
+
+    // Plot buffers
+    const bufferWidth = (chartRight - chartLeft) / Math.max(systemicState.buffers.length, 1);
+
+    systemicState.buffers.forEach((buffer, idx) => {
+        const x = chartLeft + idx * bufferWidth + bufferWidth / 2;
+        const consumptionY = chartBottom - (buffer.consumption / 100) * chartHeight;
+
+        // Draw point
+        ctx.fillStyle = buffer.getColorCode();
+        ctx.beginPath();
+        ctx.arc(x, consumptionY, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Buffer label
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        const bufferLabel = buffer.type.charAt(0).toUpperCase() + buffer.type.slice(1);
+        ctx.fillText(bufferLabel, x, chartBottom + 20);
+        ctx.fillText(`${buffer.consumption.toFixed(0)}%`, x, chartBottom + 35);
+
+        // Connect with line if not first
+        if (idx > 0) {
+            const prevX = chartLeft + (idx - 1) * bufferWidth + bufferWidth / 2;
+            const prevBuffer = systemicState.buffers[idx - 1];
+            const prevY = chartBottom - (prevBuffer.consumption / 100) * chartHeight;
+
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(x, consumptionY);
+            ctx.stroke();
+        }
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Buffer consumption over time - Take action when entering RED zone', padding, canvas.height - 20);
+}
+
+function drawCriticalChainView() {
+    const padding = 60;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Critical Chain Analysis', padding, 40);
+
+    // Identify critical chain
+    const criticalChain = systemicState.identifyCriticalChain();
+    const allTasks = systemicState.getAllTasks();
+
+    if (allTasks.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No tasks defined yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Draw similar to timeline but highlight critical chain
+    const leftMargin = 250;
+    const rowHeight = 40;
+    const barHeight = 28;
+    let y = padding + 60;
+
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+
+    // Calculate timeline range
+    let minStart = Infinity, maxEnd = 0;
+    allTasks.forEach(task => {
+        const taskStart = 0; // Simplified - would need proper date calculation
+        const taskEnd = task.durationDays;
+        minStart = Math.min(minStart, taskStart);
+        maxEnd = Math.max(maxEnd, taskEnd);
+    });
+
+    const timelineWidth = canvas.width - leftMargin - padding * 2;
+    const totalDays = Math.max(maxEnd - minStart, 1);
+    const pixelsPerDay = timelineWidth / totalDays;
+
+    // Draw tasks
+    allTasks.forEach((task, idx) => {
+        if (y > canvas.height - padding) return;
+
+        const isCritical = criticalChain.some(ct => ct.id === task.id);
+        const taskWidth = task.durationDays * pixelsPerDay;
+        const taskX = leftMargin + (idx * 10) % (timelineWidth - taskWidth); // Simplified positioning
+
+        // Label
+        ctx.fillStyle = isCritical ? '#f44336' : '#333';
+        ctx.font = isCritical ? 'bold 12px Arial' : '12px Arial';
+        const label = task.title + (isCritical ? ' ⚠️ CRITICAL' : '');
+        ctx.fillText(label, padding, y + barHeight / 2 + 4);
+
+        // Task bar
+        ctx.fillStyle = isCritical ? '#f44336' : '#9c27b0';
+        ctx.fillRect(taskX, y, taskWidth, barHeight);
+
+        // Progress overlay
+        if (task.progress > 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.fillRect(taskX, y, taskWidth * (task.progress / 100), barHeight);
+        }
+
+        // Border
+        ctx.strokeStyle = isCritical ? '#c62828' : '#666';
+        ctx.lineWidth = isCritical ? 2 : 1;
+        ctx.strokeRect(taskX, y, taskWidth, barHeight);
+
+        // Duration label
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        if (taskWidth > 40) {
+            ctx.fillText(`${task.durationDays}d`, taskX + taskWidth / 2, y + barHeight / 2 + 4);
+        }
+
+        y += rowHeight;
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    const legendY = canvas.height - 40;
+
+    ctx.fillStyle = '#f44336';
+    ctx.fillRect(padding, legendY, 20, 15);
+    ctx.strokeRect(padding, legendY, 20, 15);
+    ctx.fillStyle = '#666';
+    ctx.fillText('Critical Chain (Resource-Constrained Path)', padding + 25, legendY + 12);
+
+    ctx.fillStyle = '#9c27b0';
+    ctx.fillRect(padding + 300, legendY, 20, 15);
+    ctx.strokeRect(padding + 300, legendY, 20, 15);
+    ctx.fillText('Non-Critical Tasks', padding + 325, legendY + 12);
+}
+
+function drawResourceCalendar() {
+    const padding = 60;
+    const leftMargin = 180;
+    const dayWidth = 30;
+    const rowHeight = 35;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Resource Allocation Calendar', padding, 40);
+
+    if (systemicState.resources.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No resources defined yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Time range (show next 30 days)
+    const startDay = 0;
+    const numDays = 30;
+    const calendarWidth = numDays * dayWidth;
+
+    // Draw day headers
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666';
+
+    for (let day = 0; day < numDays; day++) {
+        const x = leftMargin + day * dayWidth;
+        if (day % 5 === 0) {
+            ctx.fillText(`Day ${day}`, x + dayWidth / 2, padding + 40);
+            // Week separator
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, padding + 50);
+            ctx.lineTo(x, padding + 50 + systemicState.resources.length * rowHeight);
+            ctx.stroke();
+        }
+    }
+
+    // Draw resources and their allocations
+    let y = padding + 60;
+
+    systemicState.resources.forEach(resource => {
+        // Resource label
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${resource.getTypeIcon()} ${resource.name}`, leftMargin - 10, y + rowHeight / 2 + 4);
+
+        // Background row
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(leftMargin, y, calendarWidth, rowHeight);
+
+        // Find tasks assigned to this resource
+        const allTasks = systemicState.getAllTasks();
+        const resourceTasks = allTasks.filter(task => task.resourceId === resource.id);
+
+        // Draw task allocations (simplified positioning)
+        let taskOffset = 0;
+        resourceTasks.forEach(task => {
+            const taskWidth = Math.min(task.durationDays * dayWidth, calendarWidth - taskOffset * dayWidth);
+            const taskX = leftMargin + taskOffset * dayWidth;
+
+            // Task block
+            ctx.fillStyle = resource.isDrumResource ? '#f44336' : '#667eea';
+            ctx.fillRect(taskX, y + 3, taskWidth, rowHeight - 6);
+
+            // Task label (if space)
+            if (taskWidth > 50) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(task.title.substring(0, 15), taskX + 5, y + rowHeight / 2 + 4);
+            }
+
+            // Border
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(taskX, y + 3, taskWidth, rowHeight - 6);
+
+            taskOffset += task.durationDays;
+            if (taskOffset >= numDays) return;
+        });
+
+        // Row border
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(leftMargin, y, calendarWidth, rowHeight);
+
+        y += rowHeight;
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Shows when resources are allocated to tasks over the next 30 days', padding, canvas.height - 20);
+}
+
 // ===== UTILITY =====
 
 function closeModal() {
@@ -2089,3 +2566,4 @@ window.deleteResource = deleteResource;
 window.closeModal = closeModal;
 window.loadExamplePlan = loadExamplePlan;
 window.clearAll = clearAll;
+window.switchView = switchView;

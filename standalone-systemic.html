@@ -83,6 +83,13 @@ header p { font-size: 12px; opacity: 0.9; }
 
 /* Resource List */
 .resource-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #f9f9f9; margin-bottom: 5px; border-radius: 4px; }
+
+/* Visualization Tabs */
+.view-tabs { display: flex; gap: 5px; }
+.tab-btn { padding: 8px 16px; border: none; border-radius: 4px 4px 0 0; cursor: pointer; background: #e0e0e0; font-size: 12px; transition: background 0.2s; }
+.tab-btn.active { background: #667eea; color: white; }
+.tab-btn:hover { background: #d0d0d0; }
+.tab-btn.active:hover { background: #5568d3; }
     </style>
 </head>
 <body>
@@ -139,9 +146,12 @@ header p { font-size: 12px; opacity: 0.9; }
             <!-- Canvas Area -->
             <main class="canvas-area">
                 <div class="canvas-header">
-                    <h2>Systemic Timeline Visualization</h2>
-                    <div>
-                        <small>Multi-level hierarchical view: Objectives → Tactics → Initiatives → Tasks</small>
+                    <h2>Visualization Dashboard</h2>
+                    <div class="view-tabs">
+                        <button class="tab-btn active" onclick="switchView('timeline')">📊 Timeline</button>
+                        <button class="tab-btn" onclick="switchView('resourceLoad')">📈 Resource Load</button>
+                        <button class="tab-btn" onclick="switchView('buffers')">🌡️ Buffers</button>
+                        <button class="tab-btn" onclick="switchView('calendar')">📅 Calendar</button>
                     </div>
                 </div>
                 <div class="canvas-wrapper">
@@ -278,9 +288,92 @@ class SystemicTask {
 }
 
 class Resource {
-    constructor(id, name) {
+    constructor(id, name, type = 'person') {
         this.id = id;
         this.name = name;
+        this.type = type; // 'person', 'equipment', 'space', 'financial', 'supplier', 'decision_maker', 'skill_pool'
+
+        // Capacity settings
+        this.capacity = 1; // Number of units (e.g., 3 FTEs)
+        this.availabilityPercent = 80; // 80% availability
+        this.maxCapacityPerDay = 8; // hours per day (for people)
+        this.loadLimitPercent = 75; // Load limit (70-80% of theoretical capacity)
+
+        // Resource characteristics
+        this.isDrumResource = false; // Is this the throughput constraint?
+        this.isSharedAcrossProjects = false;
+        this.cost = 0; // Cost per unit/day
+
+        // For specific resource types
+        this.role = ''; // For people: Owner, Operator, Designer, etc.
+        this.location = ''; // For space resources
+        this.budgetLimit = 0; // For financial resources
+
+        // Metadata
+        this.description = '';
+        this.notes = '';
+    }
+
+    getEffectiveCapacity() {
+        return this.capacity * (this.availabilityPercent / 100) * (this.loadLimitPercent / 100);
+    }
+
+    getMaxDailyHours() {
+        if (this.type === 'person' || this.type === 'skill_pool') {
+            return this.maxCapacityPerDay * this.capacity * (this.availabilityPercent / 100);
+        }
+        return this.maxCapacityPerDay;
+    }
+
+    toString() {
+        return `${this.getTypeIcon()} ${this.name} (${this.capacity} @ ${this.availabilityPercent}%)`;
+    }
+
+    getTypeIcon() {
+        const icons = {
+            'person': '👤',
+            'equipment': '⚙️',
+            'space': '📍',
+            'financial': '💰',
+            'supplier': '🏭',
+            'decision_maker': '👔',
+            'skill_pool': '👥'
+        };
+        return icons[this.type] || '📦';
+    }
+}
+
+// Buffer classes for CCPM
+class Buffer {
+    constructor(id, type, size, taskId = null) {
+        this.id = id;
+        this.type = type; // 'project', 'feeding', 'resource'
+        this.size = size; // Duration in days
+        this.consumption = 0; // How much has been used (0-100%)
+        this.taskId = taskId; // Associated task if applicable
+        this.status = 'green'; // green, yellow, red
+        this.createdDate = new Date();
+    }
+
+    updateConsumption(consumed) {
+        this.consumption = Math.min(100, Math.max(0, consumed));
+        this.updateStatus();
+    }
+
+    updateStatus() {
+        // Green: 0-33%, Yellow: 33-66%, Red: 66-100%
+        if (this.consumption >= 66) {
+            this.status = 'red';
+        } else if (this.consumption >= 33) {
+            this.status = 'yellow';
+        } else {
+            this.status = 'green';
+        }
+    }
+
+    getColorCode() {
+        return this.status === 'red' ? '#f44336' :
+               this.status === 'yellow' ? '#ff9800' : '#4caf50';
     }
 }
 
@@ -291,6 +384,7 @@ class SystemicProjectState {
         this.projectName = 'Systemic Plan';
         this.objectives = [];
         this.resources = [];
+        this.buffers = []; // Project, feeding, and resource buffers
         this.currentDate = new Date();
         this.createdDate = new Date().toISOString();
         this.nextObjectiveId = 1;
@@ -298,6 +392,11 @@ class SystemicProjectState {
         this.nextInitiativeId = 1;
         this.nextTaskId = 1;
         this.nextResourceId = 1;
+        this.nextBufferId = 1;
+
+        // Resource management
+        this.resourceLoads = new Map(); // Track resource usage over time
+        this.criticalChain = []; // Tasks on the resource-constrained critical path
     }
 
     // Objective operations
@@ -413,14 +512,172 @@ class SystemicProjectState {
     }
 
     // Resource operations
-    addResource(name) {
-        const resource = new Resource(this.nextResourceId++, name);
+    addResource(name, type = 'person') {
+        const resource = new Resource(this.nextResourceId++, name, type);
         this.resources.push(resource);
         return resource;
     }
 
     deleteResource(id) {
         this.resources = this.resources.filter(r => r.id !== id);
+    }
+
+    getResource(id) {
+        return this.resources.find(r => r.id === id);
+    }
+
+    // Create common resource templates
+    loadCommonResources() {
+        const templates = [
+            { name: 'Owner / CEO', type: 'decision_maker', role: 'Owner', capacity: 1, availability: 60, loadLimit: 70, isDrum: true },
+            { name: 'Investment Committee', type: 'decision_maker', role: 'Committee', capacity: 1, availability: 40, loadLimit: 60 },
+            { name: 'Fractional CFO', type: 'person', role: 'CFO', capacity: 1, availability: 50, loadLimit: 75, isShared: true },
+            { name: 'Exit Planner', type: 'person', role: 'Planner', capacity: 1, availability: 80, loadLimit: 75, isShared: true },
+            { name: 'Designer / Engineer', type: 'skill_pool', role: 'Designer', capacity: 2, availability: 80, loadLimit: 75 },
+            { name: 'SME (Subject Matter Expert)', type: 'skill_pool', role: 'SME', capacity: 1, availability: 70, loadLimit: 70 },
+            { name: 'Operator', type: 'skill_pool', role: 'Operator', capacity: 3, availability: 80, loadLimit: 80 },
+            { name: 'Conference Room A', type: 'space', location: 'Main Building', capacity: 1, maxPerDay: 10 },
+            { name: 'Workshop Bay 1', type: 'space', location: 'Workshop', capacity: 1, maxPerDay: 16 },
+            { name: 'Monthly OpEx Budget', type: 'financial', budgetLimit: 50000, capacity: 1 }
+        ];
+
+        templates.forEach(t => {
+            const resource = this.addResource(t.name, t.type);
+            resource.role = t.role || '';
+            resource.capacity = t.capacity;
+            resource.availabilityPercent = t.availability;
+            resource.loadLimitPercent = t.loadLimit;
+            resource.isDrumResource = t.isDrum || false;
+            resource.isSharedAcrossProjects = t.isShared || false;
+            resource.location = t.location || '';
+            resource.budgetLimit = t.budgetLimit || 0;
+            resource.maxCapacityPerDay = t.maxPerDay || 8;
+        });
+    }
+
+    // Buffer operations
+    addBuffer(type, size, taskId = null) {
+        const buffer = new Buffer(this.nextBufferId++, type, size, taskId);
+        this.buffers.push(buffer);
+        return buffer;
+    }
+
+    getBuffer(id) {
+        return this.buffers.find(b => b.id === id);
+    }
+
+    deleteBuffer(id) {
+        this.buffers = this.buffers.filter(b => b.id !== id);
+    }
+
+    // Calculate resource load across all tasks
+    calculateResourceLoad() {
+        this.resourceLoads.clear();
+
+        const allTasks = this.getAllTasks();
+        allTasks.forEach(task => {
+            if (task.resourceId) {
+                if (!this.resourceLoads.has(task.resourceId)) {
+                    this.resourceLoads.set(task.resourceId, {
+                        totalDays: 0,
+                        tasks: [],
+                        utilizationPercent: 0
+                    });
+                }
+
+                const load = this.resourceLoads.get(task.resourceId);
+                load.totalDays += task.durationDays;
+                load.tasks.push(task);
+            }
+        });
+
+        // Calculate utilization percentage
+        this.resourceLoads.forEach((load, resourceId) => {
+            const resource = this.getResource(resourceId);
+            if (resource) {
+                const maxAvailableDays = resource.getEffectiveCapacity() * 90; // Assume 90-day window
+                load.utilizationPercent = (load.totalDays / maxAvailableDays) * 100;
+            }
+        });
+
+        return this.resourceLoads;
+    }
+
+    // Identify resource-constrained critical chain
+    identifyCriticalChain() {
+        const allTasks = this.getAllTasks();
+
+        // Find tasks with dependencies and resource constraints
+        const taskGraph = new Map();
+        allTasks.forEach(task => {
+            taskGraph.set(task.id, {
+                task: task,
+                duration: task.durationDays,
+                resource: task.resourceId,
+                successors: [],
+                earliestStart: 0,
+                latestStart: Infinity,
+                slack: Infinity
+            });
+        });
+
+        // Build dependency graph
+        allTasks.forEach(task => {
+            if (task.predecessors && task.predecessors.length > 0) {
+                task.predecessors.forEach(predId => {
+                    const predNode = taskGraph.get(predId);
+                    if (predNode) {
+                        predNode.successors.push(task.id);
+                    }
+                });
+            }
+        });
+
+        // Forward pass - calculate earliest start
+        const visited = new Set();
+        const calculateEarliestStart = (taskId) => {
+            if (visited.has(taskId)) return;
+            visited.add(taskId);
+
+            const node = taskGraph.get(taskId);
+            const task = node.task;
+
+            if (task.predecessors && task.predecessors.length > 0) {
+                task.predecessors.forEach(predId => {
+                    calculateEarliestStart(predId);
+                    const predNode = taskGraph.get(predId);
+                    if (predNode) {
+                        node.earliestStart = Math.max(node.earliestStart, predNode.earliestStart + predNode.duration);
+                    }
+                });
+            }
+
+            node.successors.forEach(succId => calculateEarliestStart(succId));
+        };
+
+        taskGraph.forEach((node, taskId) => calculateEarliestStart(taskId));
+
+        // Find critical path (tasks with zero slack)
+        this.criticalChain = Array.from(taskGraph.values())
+            .filter(node => node.slack === 0 || node.task.resourceId)
+            .map(node => node.task)
+            .sort((a, b) => {
+                const nodeA = taskGraph.get(a.id);
+                const nodeB = taskGraph.get(b.id);
+                return nodeA.earliestStart - nodeB.earliestStart;
+            });
+
+        return this.criticalChain;
+    }
+
+    // Get drum resources (throughput constraints)
+    getDrumResources() {
+        return this.resources.filter(r => r.isDrumResource);
+    }
+
+    // Get shared resources
+    getSharedResources() {
+        return this.resources.filter(r => r.isSharedAcrossProjects);
     }
 
     // Progress calculation
@@ -435,11 +692,14 @@ class SystemicProjectState {
             currentDate: this.currentDate,
             objectives: this.objectives,
             resources: this.resources,
+            buffers: this.buffers,
+            criticalChain: this.criticalChain.map(t => t.id),
             nextObjectiveId: this.nextObjectiveId,
             nextTacticId: this.nextTacticId,
             nextInitiativeId: this.nextInitiativeId,
             nextTaskId: this.nextTaskId,
             nextResourceId: this.nextResourceId,
+            nextBufferId: this.nextBufferId,
             createdDate: this.createdDate,
             modifiedDate: new Date().toISOString()
         };
@@ -453,12 +713,34 @@ class SystemicProjectState {
         this.nextInitiativeId = data.nextInitiativeId || 1;
         this.nextTaskId = data.nextTaskId || 1;
         this.nextResourceId = data.nextResourceId || 1;
+        this.nextBufferId = data.nextBufferId || 1;
         this.createdDate = data.createdDate;
 
-        // Reconstruct resources
+        // Reconstruct resources with enhanced properties
         this.resources = (data.resources || []).map(r => {
-            const resource = new Resource(r.id, r.name);
+            const resource = new Resource(r.id, r.name, r.type || 'person');
+            resource.capacity = r.capacity || 1;
+            resource.availabilityPercent = r.availabilityPercent || 80;
+            resource.maxCapacityPerDay = r.maxCapacityPerDay || 8;
+            resource.loadLimitPercent = r.loadLimitPercent || 75;
+            resource.isDrumResource = r.isDrumResource || false;
+            resource.isSharedAcrossProjects = r.isSharedAcrossProjects || false;
+            resource.cost = r.cost || 0;
+            resource.role = r.role || '';
+            resource.location = r.location || '';
+            resource.budgetLimit = r.budgetLimit || 0;
+            resource.description = r.description || '';
+            resource.notes = r.notes || '';
             return resource;
+        });
+
+        // Reconstruct buffers
+        this.buffers = (data.buffers || []).map(b => {
+            const buffer = new Buffer(b.id, b.type, b.size, b.taskId);
+            buffer.consumption = b.consumption || 0;
+            buffer.status = b.status || 'green';
+            buffer.createdDate = new Date(b.createdDate);
+            return buffer;
         });
 
         // Reconstruct hierarchy
@@ -508,6 +790,7 @@ let systemicState = new SystemicProjectState();
 let canvas, ctx;
 let scale = 1;
 let viewMode = 'all'; // all, objectives, tactics, initiatives, tasks
+let currentView = 'timeline'; // timeline, resourceLoad, buffers, calendar
 let selectedItem = null;
 let editingItem = null;
 let autoSaveInterval = null;
@@ -1344,7 +1627,52 @@ function showAddResourceForm() {
         <h2>Add Resource</h2>
         <div class="form-group">
             <label>Name:</label>
-            <input type="text" id="resourceName" placeholder="Enter resource name">
+            <input type="text" id="resourceName" placeholder="Enter resource name" required>
+        </div>
+        <div class="form-group">
+            <label>Type:</label>
+            <select id="resourceType">
+                <option value="person">👤 Person</option>
+                <option value="skill_pool">👥 Skill Pool / Role</option>
+                <option value="decision_maker">👔 Decision Maker</option>
+                <option value="equipment">⚙️ Equipment</option>
+                <option value="space">📍 Space / Location</option>
+                <option value="financial">💰 Financial / Budget</option>
+                <option value="supplier">🏭 Supplier</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Capacity (units/FTEs):</label>
+            <input type="number" id="resourceCapacity" min="1" value="1" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Availability (%):</label>
+            <input type="number" id="resourceAvailability" min="1" max="100" value="80">
+        </div>
+        <div class="form-group">
+            <label>Load Limit (%):</label>
+            <input type="number" id="resourceLoadLimit" min="1" max="100" value="75">
+            <small style="color: #666;">70-80% recommended for realistic planning</small>
+        </div>
+        <div class="form-group">
+            <label>Max Hours/Day:</label>
+            <input type="number" id="resourceMaxPerDay" min="1" max="24" value="8">
+        </div>
+        <div class="form-group">
+            <label>Role/Title (optional):</label>
+            <input type="text" id="resourceRole" placeholder="e.g., Owner, Designer, CFO">
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="resourceIsDrum">
+                Mark as Drum Resource (throughput constraint)
+            </label>
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="resourceIsShared">
+                Shared across multiple projects
+            </label>
         </div>
         <div class="form-actions">
             <button onclick="saveResource()" class="btn btn-primary">Save</button>
@@ -1362,7 +1690,17 @@ function saveResource() {
         return;
     }
 
-    systemicState.addResource(name);
+    const type = document.getElementById('resourceType').value;
+    const resource = systemicState.addResource(name, type);
+
+    resource.capacity = parseFloat(document.getElementById('resourceCapacity').value);
+    resource.availabilityPercent = parseInt(document.getElementById('resourceAvailability').value);
+    resource.loadLimitPercent = parseInt(document.getElementById('resourceLoadLimit').value);
+    resource.maxCapacityPerDay = parseInt(document.getElementById('resourceMaxPerDay').value);
+    resource.role = document.getElementById('resourceRole').value.trim();
+    resource.isDrumResource = document.getElementById('resourceIsDrum').checked;
+    resource.isSharedAcrossProjects = document.getElementById('resourceIsShared').checked;
+
     closeModal();
     renderResourceList();
     saveToLocalStorage();
@@ -1373,15 +1711,169 @@ function renderResourceList() {
     if (!list) return;
 
     list.innerHTML = '';
+
+    // Add button to load common resources
+    const loadCommonBtn = document.createElement('button');
+    loadCommonBtn.className = 'btn btn-secondary';
+    loadCommonBtn.style.width = '100%';
+    loadCommonBtn.style.marginBottom = '15px';
+    loadCommonBtn.textContent = '📦 Load Common Resources';
+    loadCommonBtn.onclick = loadCommonResources;
+    list.appendChild(loadCommonBtn);
+
+    // Group resources by type
+    const groupedResources = {};
     systemicState.resources.forEach(r => {
-        const div = document.createElement('div');
-        div.className = 'resource-item';
-        div.innerHTML = `
-            <span>${r.name}</span>
-            <button onclick="deleteResource(${r.id})" class="btn-remove">×</button>
-        `;
-        list.appendChild(div);
+        if (!groupedResources[r.type]) {
+            groupedResources[r.type] = [];
+        }
+        groupedResources[r.type].push(r);
     });
+
+    // Display resources by type
+    Object.keys(groupedResources).sort().forEach(type => {
+        const typeHeader = document.createElement('div');
+        typeHeader.style.fontWeight = 'bold';
+        typeHeader.style.marginTop = '10px';
+        typeHeader.style.marginBottom = '5px';
+        typeHeader.style.fontSize = '12px';
+        typeHeader.style.color = '#667eea';
+        typeHeader.textContent = type.replace('_', ' ').toUpperCase();
+        list.appendChild(typeHeader);
+
+        groupedResources[type].forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'resource-item';
+            div.style.marginBottom = '5px';
+            div.style.padding = '8px';
+            div.style.borderRadius = '4px';
+            div.style.background = r.isDrumResource ? '#fff3e0' : (r.isSharedAcrossProjects ? '#e3f2fd' : '#f9f9f9');
+
+            const effectiveCapacity = r.getEffectiveCapacity().toFixed(2);
+            const badges = [];
+            if (r.isDrumResource) badges.push('<span style="background:#ff9800;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:5px;">DRUM</span>');
+            if (r.isSharedAcrossProjects) badges.push('<span style="background:#2196f3;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:5px;">SHARED</span>');
+
+            div.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div style="flex:1;">
+                        <div style="font-weight:600;cursor:pointer;" onclick="editResource(${r.id})">
+                            ${r.getTypeIcon()} ${r.name}
+                            ${badges.join('')}
+                        </div>
+                        <div style="font-size:10px;color:#666;margin-top:2px;">
+                            ${r.capacity} × ${r.availabilityPercent}% × ${r.loadLimitPercent}% = ${effectiveCapacity} effective
+                            ${r.role ? ' | ' + r.role : ''}
+                        </div>
+                    </div>
+                    <button onclick="deleteResource(${r.id})" class="btn-remove">×</button>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    });
+
+    if (systemicState.resources.length === 0) {
+        list.innerHTML += '<div style="text-align:center;padding:20px;color:#999;font-size:12px;">No resources yet. Click "Load Common Resources" to start.</div>';
+    }
+}
+
+function editResource(id) {
+    const resource = systemicState.getResource(id);
+    if (!resource) return;
+
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2>Edit Resource</h2>
+        <div class="form-group">
+            <label>Name:</label>
+            <input type="text" id="resourceName" value="${resource.name}" required>
+        </div>
+        <div class="form-group">
+            <label>Type:</label>
+            <select id="resourceType">
+                <option value="person" ${resource.type === 'person' ? 'selected' : ''}>👤 Person</option>
+                <option value="skill_pool" ${resource.type === 'skill_pool' ? 'selected' : ''}>👥 Skill Pool / Role</option>
+                <option value="decision_maker" ${resource.type === 'decision_maker' ? 'selected' : ''}>👔 Decision Maker</option>
+                <option value="equipment" ${resource.type === 'equipment' ? 'selected' : ''}>⚙️ Equipment</option>
+                <option value="space" ${resource.type === 'space' ? 'selected' : ''}>📍 Space / Location</option>
+                <option value="financial" ${resource.type === 'financial' ? 'selected' : ''}>💰 Financial / Budget</option>
+                <option value="supplier" ${resource.type === 'supplier' ? 'selected' : ''}>🏭 Supplier</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Capacity (units/FTEs):</label>
+            <input type="number" id="resourceCapacity" min="1" value="${resource.capacity}" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Availability (%):</label>
+            <input type="number" id="resourceAvailability" min="1" max="100" value="${resource.availabilityPercent}">
+        </div>
+        <div class="form-group">
+            <label>Load Limit (%):</label>
+            <input type="number" id="resourceLoadLimit" min="1" max="100" value="${resource.loadLimitPercent}">
+        </div>
+        <div class="form-group">
+            <label>Max Hours/Day:</label>
+            <input type="number" id="resourceMaxPerDay" min="1" max="24" value="${resource.maxCapacityPerDay}">
+        </div>
+        <div class="form-group">
+            <label>Role/Title:</label>
+            <input type="text" id="resourceRole" value="${resource.role}">
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="resourceIsDrum" ${resource.isDrumResource ? 'checked' : ''}>
+                Mark as Drum Resource (throughput constraint)
+            </label>
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="resourceIsShared" ${resource.isSharedAcrossProjects ? 'checked' : ''}>
+                Shared across multiple projects
+            </label>
+        </div>
+        <div class="form-actions">
+            <button onclick="updateResource(${id})" class="btn btn-primary">Update</button>
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function updateResource(id) {
+    const resource = systemicState.getResource(id);
+    if (!resource) return;
+
+    resource.name = document.getElementById('resourceName').value.trim();
+    resource.type = document.getElementById('resourceType').value;
+    resource.capacity = parseFloat(document.getElementById('resourceCapacity').value);
+    resource.availabilityPercent = parseInt(document.getElementById('resourceAvailability').value);
+    resource.loadLimitPercent = parseInt(document.getElementById('resourceLoadLimit').value);
+    resource.maxCapacityPerDay = parseInt(document.getElementById('resourceMaxPerDay').value);
+    resource.role = document.getElementById('resourceRole').value.trim();
+    resource.isDrumResource = document.getElementById('resourceIsDrum').checked;
+    resource.isSharedAcrossProjects = document.getElementById('resourceIsShared').checked;
+
+    closeModal();
+    renderResourceList();
+    saveToLocalStorage();
+}
+
+function loadCommonResources() {
+    if (systemicState.resources.length > 0) {
+        if (!confirm('This will add common resource templates. Continue?')) {
+            return;
+        }
+    }
+
+    systemicState.loadCommonResources();
+    renderResourceList();
+    saveToLocalStorage();
+    alert('Common resources loaded! You can now edit them to match your needs.');
 }
 
 function deleteResource(id) {
@@ -1405,8 +1897,23 @@ function renderCanvas() {
         return;
     }
 
-    // Simple timeline visualization
-    drawTimeline();
+    // Render based on current view
+    switch (currentView) {
+        case 'timeline':
+            drawTimeline();
+            break;
+        case 'resourceLoad':
+            drawResourceLoad();
+            break;
+        case 'buffers':
+            drawBufferChart();
+            break;
+        case 'calendar':
+            drawResourceCalendar();
+            break;
+        default:
+            drawTimeline();
+    }
 }
 
 function drawEmptyState() {
@@ -1673,6 +2180,467 @@ function drawLegend(x, y, colors) {
     });
 }
 
+// ===== VIEW SWITCHING =====
+
+function switchView(view) {
+    currentView = view;
+
+    // Update tab button states
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    // Re-render canvas
+    renderCanvas();
+}
+
+// ===== ADDITIONAL VISUALIZATIONS =====
+
+function drawResourceLoad() {
+    const padding = 60;
+    const leftMargin = 200;
+    const chartWidth = canvas.width - leftMargin - padding * 2;
+    const chartHeight = canvas.height - padding * 2;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Resource Utilization', padding, 40);
+
+    // Calculate resource loads
+    const resourceLoads = systemicState.calculateResourceLoad();
+
+    if (resourceLoads.size === 0 || systemicState.resources.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No resources assigned to tasks yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Prepare data
+    const resourceData = [];
+    systemicState.resources.forEach(resource => {
+        const load = resourceLoads.get(resource.id) || { utilizationPercent: 0, totalDays: 0 };
+        resourceData.push({
+            name: resource.name,
+            icon: resource.getTypeIcon(),
+            utilization: Math.min(100, load.utilizationPercent),
+            totalDays: load.totalDays,
+            capacity: resource.getEffectiveCapacity() * 90, // 90-day window
+            isDrum: resource.isDrumResource
+        });
+    });
+
+    // Sort by utilization
+    resourceData.sort((a, b) => b.utilization - a.utilization);
+
+    const barHeight = 30;
+    const barGap = 15;
+    const maxBarWidth = chartWidth - 100;
+    let y = padding + 60;
+
+    // Draw bars
+    resourceData.forEach((data, idx) => {
+        if (y + barHeight > canvas.height - padding) return; // Don't overflow
+
+        // Resource label
+        ctx.fillStyle = '#333';
+        ctx.font = '13px Arial';
+        ctx.textAlign = 'right';
+        const label = `${data.icon} ${data.name}`;
+        ctx.fillText(label, leftMargin - 10, y + barHeight / 2 + 5);
+
+        // Bar background
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(leftMargin, y, maxBarWidth, barHeight);
+
+        // Utilization bar
+        const barWidth = (data.utilization / 100) * maxBarWidth;
+        let barColor = '#4caf50'; // Green
+        if (data.utilization >= 90) barColor = '#f44336'; // Red (overloaded)
+        else if (data.utilization >= 75) barColor = '#ff9800'; // Orange
+
+        ctx.fillStyle = barColor;
+        ctx.fillRect(leftMargin, y, barWidth, barHeight);
+
+        // Utilization percentage
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        if (barWidth > 50) {
+            ctx.fillText(`${data.utilization.toFixed(1)}%`, leftMargin + 10, y + barHeight / 2 + 5);
+        } else {
+            ctx.fillStyle = '#333';
+            ctx.fillText(`${data.utilization.toFixed(1)}%`, leftMargin + barWidth + 10, y + barHeight / 2 + 5);
+        }
+
+        // Drum indicator
+        if (data.isDrum) {
+            ctx.fillStyle = '#9c27b0';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('DRUM', leftMargin + maxBarWidth + 50, y + barHeight / 2 + 5);
+        }
+
+        // Border
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(leftMargin, y, maxBarWidth, barHeight);
+
+        y += barHeight + barGap;
+    });
+
+    // Legend
+    y = canvas.height - 40;
+    const legendItems = [
+        { color: '#4caf50', label: '<75% Normal' },
+        { color: '#ff9800', label: '75-90% High' },
+        { color: '#f44336', label: '>90% Overloaded' }
+    ];
+
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    let legendX = padding;
+    legendItems.forEach(item => {
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX, y, 15, 15);
+        ctx.strokeStyle = '#666';
+        ctx.strokeRect(legendX, y, 15, 15);
+        ctx.fillStyle = '#666';
+        ctx.fillText(item.label, legendX + 20, y + 12);
+        legendX += 150;
+    });
+}
+
+function drawBufferChart() {
+    const padding = 60;
+    const chartWidth = canvas.width - padding * 2;
+    const chartHeight = canvas.height - padding * 2 - 50;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Buffer Fever Chart', padding, 40);
+
+    if (systemicState.buffers.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No buffers defined yet', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('Buffers protect the critical chain from delays', canvas.width / 2, canvas.height / 2 + 25);
+        return;
+    }
+
+    // Chart area
+    const chartTop = padding + 50;
+    const chartBottom = chartTop + chartHeight;
+    const chartLeft = padding + 100;
+    const chartRight = chartLeft + (chartWidth - 100);
+
+    // Draw zones (Green, Yellow, Red)
+    const greenZone = chartHeight * 0.33;
+    const yellowZone = chartHeight * 0.33;
+    const redZone = chartHeight * 0.34;
+
+    // Red zone (top)
+    ctx.fillStyle = 'rgba(244, 67, 54, 0.15)';
+    ctx.fillRect(chartLeft, chartTop, chartRight - chartLeft, redZone);
+
+    // Yellow zone (middle)
+    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+    ctx.fillRect(chartLeft, chartTop + redZone, chartRight - chartLeft, yellowZone);
+
+    // Green zone (bottom)
+    ctx.fillStyle = 'rgba(76, 175, 80, 0.15)';
+    ctx.fillRect(chartLeft, chartTop + redZone + yellowZone, chartRight - chartLeft, greenZone);
+
+    // Y-axis
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, chartTop);
+    ctx.lineTo(chartLeft, chartBottom);
+    ctx.stroke();
+
+    // X-axis
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, chartBottom);
+    ctx.lineTo(chartRight, chartBottom);
+    ctx.stroke();
+
+    // Y-axis labels
+    ctx.fillStyle = '#666';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('100%', chartLeft - 10, chartTop + 5);
+    ctx.fillText('66%', chartLeft - 10, chartTop + redZone + 5);
+    ctx.fillText('33%', chartLeft - 10, chartTop + redZone + yellowZone + 5);
+    ctx.fillText('0%', chartLeft - 10, chartBottom + 5);
+
+    // Draw zone labels
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#f44336';
+    ctx.fillText('RED ZONE', chartRight + 10, chartTop + redZone / 2);
+    ctx.fillStyle = '#ff9800';
+    ctx.fillText('YELLOW ZONE', chartRight + 10, chartTop + redZone + yellowZone / 2);
+    ctx.fillStyle = '#4caf50';
+    ctx.fillText('GREEN ZONE', chartRight + 10, chartTop + redZone + yellowZone + greenZone / 2);
+
+    // Plot buffers
+    const bufferWidth = (chartRight - chartLeft) / Math.max(systemicState.buffers.length, 1);
+
+    systemicState.buffers.forEach((buffer, idx) => {
+        const x = chartLeft + idx * bufferWidth + bufferWidth / 2;
+        const consumptionY = chartBottom - (buffer.consumption / 100) * chartHeight;
+
+        // Draw point
+        ctx.fillStyle = buffer.getColorCode();
+        ctx.beginPath();
+        ctx.arc(x, consumptionY, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Buffer label
+        ctx.fillStyle = '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        const bufferLabel = buffer.type.charAt(0).toUpperCase() + buffer.type.slice(1);
+        ctx.fillText(bufferLabel, x, chartBottom + 20);
+        ctx.fillText(`${buffer.consumption.toFixed(0)}%`, x, chartBottom + 35);
+
+        // Connect with line if not first
+        if (idx > 0) {
+            const prevX = chartLeft + (idx - 1) * bufferWidth + bufferWidth / 2;
+            const prevBuffer = systemicState.buffers[idx - 1];
+            const prevY = chartBottom - (prevBuffer.consumption / 100) * chartHeight;
+
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(x, consumptionY);
+            ctx.stroke();
+        }
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Buffer consumption over time - Take action when entering RED zone', padding, canvas.height - 20);
+}
+
+function drawCriticalChainView() {
+    const padding = 60;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Critical Chain Analysis', padding, 40);
+
+    // Identify critical chain
+    const criticalChain = systemicState.identifyCriticalChain();
+    const allTasks = systemicState.getAllTasks();
+
+    if (allTasks.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No tasks defined yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Draw similar to timeline but highlight critical chain
+    const leftMargin = 250;
+    const rowHeight = 40;
+    const barHeight = 28;
+    let y = padding + 60;
+
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+
+    // Calculate timeline range
+    let minStart = Infinity, maxEnd = 0;
+    allTasks.forEach(task => {
+        const taskStart = 0; // Simplified - would need proper date calculation
+        const taskEnd = task.durationDays;
+        minStart = Math.min(minStart, taskStart);
+        maxEnd = Math.max(maxEnd, taskEnd);
+    });
+
+    const timelineWidth = canvas.width - leftMargin - padding * 2;
+    const totalDays = Math.max(maxEnd - minStart, 1);
+    const pixelsPerDay = timelineWidth / totalDays;
+
+    // Draw tasks
+    allTasks.forEach((task, idx) => {
+        if (y > canvas.height - padding) return;
+
+        const isCritical = criticalChain.some(ct => ct.id === task.id);
+        const taskWidth = task.durationDays * pixelsPerDay;
+        const taskX = leftMargin + (idx * 10) % (timelineWidth - taskWidth); // Simplified positioning
+
+        // Label
+        ctx.fillStyle = isCritical ? '#f44336' : '#333';
+        ctx.font = isCritical ? 'bold 12px Arial' : '12px Arial';
+        const label = task.title + (isCritical ? ' ⚠️ CRITICAL' : '');
+        ctx.fillText(label, padding, y + barHeight / 2 + 4);
+
+        // Task bar
+        ctx.fillStyle = isCritical ? '#f44336' : '#9c27b0';
+        ctx.fillRect(taskX, y, taskWidth, barHeight);
+
+        // Progress overlay
+        if (task.progress > 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.fillRect(taskX, y, taskWidth * (task.progress / 100), barHeight);
+        }
+
+        // Border
+        ctx.strokeStyle = isCritical ? '#c62828' : '#666';
+        ctx.lineWidth = isCritical ? 2 : 1;
+        ctx.strokeRect(taskX, y, taskWidth, barHeight);
+
+        // Duration label
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        if (taskWidth > 40) {
+            ctx.fillText(`${task.durationDays}d`, taskX + taskWidth / 2, y + barHeight / 2 + 4);
+        }
+
+        y += rowHeight;
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    const legendY = canvas.height - 40;
+
+    ctx.fillStyle = '#f44336';
+    ctx.fillRect(padding, legendY, 20, 15);
+    ctx.strokeRect(padding, legendY, 20, 15);
+    ctx.fillStyle = '#666';
+    ctx.fillText('Critical Chain (Resource-Constrained Path)', padding + 25, legendY + 12);
+
+    ctx.fillStyle = '#9c27b0';
+    ctx.fillRect(padding + 300, legendY, 20, 15);
+    ctx.strokeRect(padding + 300, legendY, 20, 15);
+    ctx.fillText('Non-Critical Tasks', padding + 325, legendY + 12);
+}
+
+function drawResourceCalendar() {
+    const padding = 60;
+    const leftMargin = 180;
+    const dayWidth = 30;
+    const rowHeight = 35;
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Resource Allocation Calendar', padding, 40);
+
+    if (systemicState.resources.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No resources defined yet', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    // Time range (show next 30 days)
+    const startDay = 0;
+    const numDays = 30;
+    const calendarWidth = numDays * dayWidth;
+
+    // Draw day headers
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666';
+
+    for (let day = 0; day < numDays; day++) {
+        const x = leftMargin + day * dayWidth;
+        if (day % 5 === 0) {
+            ctx.fillText(`Day ${day}`, x + dayWidth / 2, padding + 40);
+            // Week separator
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, padding + 50);
+            ctx.lineTo(x, padding + 50 + systemicState.resources.length * rowHeight);
+            ctx.stroke();
+        }
+    }
+
+    // Draw resources and their allocations
+    let y = padding + 60;
+
+    systemicState.resources.forEach(resource => {
+        // Resource label
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${resource.getTypeIcon()} ${resource.name}`, leftMargin - 10, y + rowHeight / 2 + 4);
+
+        // Background row
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(leftMargin, y, calendarWidth, rowHeight);
+
+        // Find tasks assigned to this resource
+        const allTasks = systemicState.getAllTasks();
+        const resourceTasks = allTasks.filter(task => task.resourceId === resource.id);
+
+        // Draw task allocations (simplified positioning)
+        let taskOffset = 0;
+        resourceTasks.forEach(task => {
+            const taskWidth = Math.min(task.durationDays * dayWidth, calendarWidth - taskOffset * dayWidth);
+            const taskX = leftMargin + taskOffset * dayWidth;
+
+            // Task block
+            ctx.fillStyle = resource.isDrumResource ? '#f44336' : '#667eea';
+            ctx.fillRect(taskX, y + 3, taskWidth, rowHeight - 6);
+
+            // Task label (if space)
+            if (taskWidth > 50) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(task.title.substring(0, 15), taskX + 5, y + rowHeight / 2 + 4);
+            }
+
+            // Border
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(taskX, y + 3, taskWidth, rowHeight - 6);
+
+            taskOffset += task.durationDays;
+            if (taskOffset >= numDays) return;
+        });
+
+        // Row border
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(leftMargin, y, calendarWidth, rowHeight);
+
+        y += rowHeight;
+    });
+
+    // Legend
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#666';
+    ctx.fillText('Shows when resources are allocated to tasks over the next 30 days', padding, canvas.height - 20);
+}
+
 // ===== UTILITY =====
 
 function closeModal() {
@@ -1762,8 +2730,14 @@ window.updateTask = updateTask;
 window.updateTaskProgress = updateTaskProgress;
 window.showAddResourceForm = showAddResourceForm;
 window.saveResource = saveResource;
+window.editResource = editResource;
+window.updateResource = updateResource;
+window.loadCommonResources = loadCommonResources;
 window.deleteResource = deleteResource;
 window.closeModal = closeModal;
 window.loadExamplePlan = loadExamplePlan;
 window.clearAll = clearAll;
-</script></body></html>
+window.switchView = switchView;
+    </script>
+</body>
+</html>
