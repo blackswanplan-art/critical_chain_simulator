@@ -90,6 +90,13 @@ header p { font-size: 12px; opacity: 0.9; }
 .tab-btn.active { background: #667eea; color: white; }
 .tab-btn:hover { background: #d0d0d0; }
 .tab-btn.active:hover { background: #5568d3; }
+
+/* Time Scale Tabs */
+.time-scale-tabs { display: flex; gap: 3px; }
+.time-scale-btn { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white; font-size: 11px; transition: all 0.2s; }
+.time-scale-btn.active { background: #667eea; color: white; border-color: #667eea; font-weight: bold; }
+.time-scale-btn:hover { background: #f0f0f0; border-color: #bbb; }
+.time-scale-btn.active:hover { background: #5568d3; }
     </style>
 </head>
 <body>
@@ -147,13 +154,28 @@ header p { font-size: 12px; opacity: 0.9; }
             <!-- Canvas Area -->
             <main class="canvas-area">
                 <div class="canvas-header">
-                    <h2>Visualization Dashboard</h2>
-                    <div class="view-tabs">
-                        <button class="tab-btn active" onclick="switchView('timeline')">📊 Timeline</button>
-                        <button class="tab-btn" onclick="switchView('resourceLoad')">📈 Resource Load</button>
-                        <button class="tab-btn" onclick="switchView('buffers')">🌡️ Buffers</button>
-                        <button class="tab-btn" onclick="switchView('calendar')">📅 Calendar</button>
-                        <button class="tab-btn" onclick="switchView('priority')">🎯 Priority Queue</button>
+                    <div style="display: flex; flex-direction: column; gap: 10px; flex: 1;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h2>Visualization Dashboard</h2>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 12px; color: #666;">Time Scale:</span>
+                                <div class="time-scale-tabs">
+                                    <button class="time-scale-btn" onclick="setTimeScale(7)">Week</button>
+                                    <button class="time-scale-btn" onclick="setTimeScale(30)">30d</button>
+                                    <button class="time-scale-btn active" onclick="setTimeScale(90)">90d</button>
+                                    <button class="time-scale-btn" onclick="setTimeScale(180)">180d</button>
+                                    <button class="time-scale-btn" onclick="setTimeScale(365)">1yr</button>
+                                    <button class="time-scale-btn" onclick="setTimeScale(1095)">3yr</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="view-tabs">
+                            <button class="tab-btn active" onclick="switchView('timeline')">📊 Timeline</button>
+                            <button class="tab-btn" onclick="switchView('resourceLoad')">📈 Resource Load</button>
+                            <button class="tab-btn" onclick="switchView('buffers')">🌡️ Buffers</button>
+                            <button class="tab-btn" onclick="switchView('calendar')">📅 Calendar</button>
+                            <button class="tab-btn" onclick="switchView('priority')">🎯 Priority Queue</button>
+                        </div>
                     </div>
                 </div>
                 <div class="canvas-wrapper">

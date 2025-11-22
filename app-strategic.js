@@ -736,6 +736,7 @@ let canvas, ctx;
 let scale = 1;
 let viewMode = 'all'; // all, objectives, tactics, initiatives, tasks
 let currentView = 'timeline'; // timeline, resourceLoad, buffers, calendar
+let timeScale = 90; // Time scale in days: 7 (week), 30, 90, 180, 365 (1yr), 1095 (3yr)
 let selectedItem = null;
 let editingItem = null;
 let autoSaveInterval = null;
@@ -2025,7 +2026,18 @@ function drawTimeline() {
     const rowHeight = 45;
     const barHeight = 32;
     const indent = 20;
-    let y = padding;
+    let y = padding + 20; // Extra space for title
+
+    // Add title showing current time scale
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    const scaleLabel = timeScale === 7 ? 'Week' :
+                       timeScale === 30 ? '30 Days' :
+                       timeScale === 90 ? '90 Days' :
+                       timeScale === 180 ? '180 Days' :
+                       timeScale === 365 ? '1 Year' : '3 Years';
+    ctx.fillText(`Strategic Timeline View (${scaleLabel})`, padding, 40);
 
     ctx.font = '13px Arial';
     ctx.textAlign = 'left';
@@ -2037,9 +2049,26 @@ function drawTimeline() {
         maxYear = Math.max(maxYear, obj.endYear);
     });
 
-    if (minYear === 9999) return; // No objectives
+    if (minYear === 9999) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('No objectives defined yet. Add objectives in the sidebar.', canvas.width / 2, canvas.height / 2);
+        return;
+    }
 
-    const yearRange = maxYear - minYear + 1;
+    // For shorter time scales, calculate what fits in the view
+    let displayMinYear = minYear;
+    let displayMaxYear = maxYear;
+
+    // If time scale is less than a year, zoom to show current period
+    if (timeScale < 365) {
+        const currentYear = new Date().getFullYear();
+        displayMinYear = currentYear;
+        displayMaxYear = currentYear + Math.ceil(timeScale / 365);
+    }
+
+    const yearRange = Math.max(displayMaxYear - displayMinYear + 1, 1);
     const timelineWidth = Math.max(canvas.width - leftMargin - padding * 2, 600);
     const pixelsPerYear = timelineWidth / yearRange;
 
@@ -2047,22 +2076,24 @@ function drawTimeline() {
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(leftMargin, padding - 20);
-    ctx.lineTo(leftMargin + timelineWidth, padding - 20);
+    ctx.moveTo(leftMargin, y);
+    ctx.lineTo(leftMargin + timelineWidth, y);
     ctx.stroke();
 
     // Draw year labels
     ctx.fillStyle = '#666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    for (let year = minYear; year <= maxYear; year++) {
-        const x = leftMargin + (year - minYear) * pixelsPerYear;
-        ctx.fillText(year.toString(), x, padding - 25);
+    for (let year = displayMinYear; year <= displayMaxYear; year++) {
+        const x = leftMargin + (year - displayMinYear) * pixelsPerYear;
+        ctx.fillText(year.toString(), x, y - 5);
         ctx.beginPath();
-        ctx.moveTo(x, padding - 22);
-        ctx.lineTo(x, padding - 18);
+        ctx.moveTo(x, y - 2);
+        ctx.lineTo(x, y + 2);
         ctx.stroke();
     }
+
+    y += 20; // Space after axis
 
     // Color scheme for hierarchy levels
     const colors = {
@@ -2077,9 +2108,15 @@ function drawTimeline() {
 
     // Draw each objective with its hierarchy
     systemicState.objectives.forEach((obj, objIdx) => {
+        // Skip if outside visible time range
+        if (obj.endYear < displayMinYear || obj.startYear > displayMaxYear) {
+            return;
+        }
+
         // Draw Objective
-        const objStartX = leftMargin + (obj.startYear - minYear) * pixelsPerYear;
-        const objWidth = (obj.endYear - obj.startYear) * pixelsPerYear;
+        const objStartX = leftMargin + Math.max(0, (obj.startYear - displayMinYear)) * pixelsPerYear;
+        const objEndX = leftMargin + Math.min((obj.endYear - displayMinYear + 1), yearRange) * pixelsPerYear;
+        const objWidth = objEndX - objStartX;
 
         // Label
         ctx.fillStyle = '#333';
@@ -2110,8 +2147,8 @@ function drawTimeline() {
 
         // Draw Tactics
         obj.tactics.forEach((tactic, tacIdx) => {
-            const tacStartX = leftMargin + estimateQuarterPosition(tactic.startQuarter, minYear, pixelsPerYear);
-            const tacEndX = leftMargin + estimateQuarterPosition(tactic.endQuarter, minYear, pixelsPerYear);
+            const tacStartX = leftMargin + estimateQuarterPosition(tactic.startQuarter, displayMinYear, pixelsPerYear);
+            const tacEndX = leftMargin + estimateQuarterPosition(tactic.endQuarter, displayMinYear, pixelsPerYear);
             const tacWidth = tacEndX - tacStartX;
 
             // Label with indent
@@ -2145,7 +2182,7 @@ function drawTimeline() {
 
             // Draw Initiatives
             tactic.initiatives.forEach((initiative, initIdx) => {
-                const initStartX = leftMargin + estimateQuarterPosition(initiative.startQuarter, minYear, pixelsPerYear);
+                const initStartX = leftMargin + estimateQuarterPosition(initiative.startQuarter, displayMinYear, pixelsPerYear);
                 const initWidth = pixelsPerYear * (initiative.durationQuarters / 4); // Quarters to years
 
                 // Label with more indent
@@ -2403,6 +2440,19 @@ function switchView(view) {
     event.target.classList.add('active');
 
     // Re-render canvas
+    renderCanvas();
+}
+
+function setTimeScale(days) {
+    timeScale = days;
+
+    // Update time scale button states
+    document.querySelectorAll('.time-scale-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    // Re-render canvas with new time scale
     renderCanvas();
 }
 
@@ -2755,14 +2805,52 @@ function drawCriticalChainView() {
 function drawResourceCalendar() {
     const padding = 60;
     const leftMargin = 180;
-    const dayWidth = 30;
     const rowHeight = 35;
 
-    // Title
+    // Calculate appropriate day width and label interval based on time scale
+    const numDays = timeScale;
+    const availableWidth = canvas.width - leftMargin - padding * 2;
+    const dayWidth = Math.max(2, Math.min(30, availableWidth / numDays));
+    const calendarWidth = numDays * dayWidth;
+
+    // Determine label interval and format based on scale
+    let labelInterval, labelFormat, separatorInterval;
+    if (numDays <= 7) {
+        labelInterval = 1; // Every day
+        labelFormat = (d) => `D${d}`;
+        separatorInterval = 1;
+    } else if (numDays <= 30) {
+        labelInterval = 5; // Every 5 days
+        labelFormat = (d) => `Day ${d}`;
+        separatorInterval = 5;
+    } else if (numDays <= 90) {
+        labelInterval = 7; // Weekly
+        labelFormat = (d) => `Wk ${Math.floor(d / 7) + 1}`;
+        separatorInterval = 7;
+    } else if (numDays <= 180) {
+        labelInterval = 14; // Bi-weekly
+        labelFormat = (d) => `Wk ${Math.floor(d / 7) + 1}`;
+        separatorInterval = 14;
+    } else if (numDays <= 365) {
+        labelInterval = 30; // Monthly
+        labelFormat = (d) => `M${Math.floor(d / 30) + 1}`;
+        separatorInterval = 30;
+    } else {
+        labelInterval = 90; // Quarterly
+        labelFormat = (d) => `Q${Math.floor(d / 90) + 1}`;
+        separatorInterval = 90;
+    }
+
+    // Title with time scale
     ctx.fillStyle = '#333';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText('Resource Allocation Calendar', padding, 40);
+    const scaleLabel = numDays === 7 ? 'Week' :
+                       numDays === 30 ? '30 Days' :
+                       numDays === 90 ? '90 Days' :
+                       numDays === 180 ? '180 Days' :
+                       numDays === 365 ? '1 Year' : '3 Years';
+    ctx.fillText(`Resource Allocation Calendar (${scaleLabel})`, padding, 40);
 
     if (systemicState.resources.length === 0) {
         ctx.font = '14px Arial';
@@ -2772,21 +2860,17 @@ function drawResourceCalendar() {
         return;
     }
 
-    // Time range (show next 30 days)
-    const startDay = 0;
-    const numDays = 30;
-    const calendarWidth = numDays * dayWidth;
-
-    // Draw day headers
+    // Draw time axis headers
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#666';
 
-    for (let day = 0; day < numDays; day++) {
+    for (let day = 0; day < numDays; day += labelInterval) {
         const x = leftMargin + day * dayWidth;
-        if (day % 5 === 0) {
-            ctx.fillText(`Day ${day}`, x + dayWidth / 2, padding + 40);
-            // Week separator
+        ctx.fillText(labelFormat(day), x + (labelInterval * dayWidth) / 2, padding + 40);
+
+        // Separator lines
+        if (day % separatorInterval === 0) {
             ctx.strokeStyle = '#ddd';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -2853,7 +2937,7 @@ function drawResourceCalendar() {
     ctx.font = '11px Arial';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#666';
-    ctx.fillText('Shows when resources are allocated to tasks over the next 30 days', padding, canvas.height - 20);
+    ctx.fillText(`Shows when resources are allocated to tasks over the next ${scaleLabel.toLowerCase()}`, padding, canvas.height - 20);
 }
 
 // ===== UTILITY =====
