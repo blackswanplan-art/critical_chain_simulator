@@ -1797,10 +1797,14 @@ class Resource {
         this.name = name;
         this.type = type; // 'person', 'equipment', 'space', 'financial', 'supplier', 'decision_maker', 'skill_pool'
 
+        // Unit of measurement
+        this.unit = this.getDefaultUnit(); // 'hours', 'dollars', 'units'
+        this.capacityPeriod = 'daily'; // 'daily', 'monthly', 'quarterly', 'annual' (for budget resources)
+
         // Capacity settings
         this.capacity = 1; // Number of units (e.g., 3 FTEs)
         this.availabilityPercent = 80; // 80% availability
-        this.maxCapacityPerDay = 8; // hours per day (for people)
+        this.maxCapacityPerDay = 8; // hours per day (for people) or dollars per period (for budget)
         this.loadLimitPercent = 75; // Load limit (70-80% of theoretical capacity)
 
         // Resource characteristics
@@ -1818,6 +1822,44 @@ class Resource {
         this.notes = '';
     }
 
+    getDefaultUnit() {
+        if (this.type === 'financial') {
+            return 'dollars';
+        } else if (this.type === 'space') {
+            return 'units';
+        } else {
+            return 'hours';
+        }
+    }
+
+    getUnitLabel() {
+        const labels = {
+            'hours': 'hrs',
+            'dollars': '
+</body>
+</html>
+,
+            'units': 'units'
+        };
+        return labels[this.unit] || this.unit;
+    }
+
+    getCapacityLabel() {
+        if (this.unit === 'dollars') {
+            const periodLabels = {
+                'daily': '/day',
+                'monthly': '/month',
+                'quarterly': '/quarter',
+                'annual': '/year'
+            };
+            return `${this.maxCapacityPerDay.toLocaleString()}${periodLabels[this.capacityPeriod] || ''}`;
+        } else if (this.unit === 'hours') {
+            return `${this.maxCapacityPerDay} hrs/day`;
+        } else {
+            return `${this.maxCapacityPerDay} ${this.unit}/day`;
+        }
+    }
+
     getEffectiveCapacity() {
         return this.capacity * (this.availabilityPercent / 100) * (this.loadLimitPercent / 100);
     }
@@ -1830,7 +1872,7 @@ class Resource {
     }
 
     toString() {
-        return `${this.getTypeIcon()} ${this.name} (${this.capacity} @ ${this.availabilityPercent}%)`;
+        return `${this.getTypeIcon()} ${this.name} (${this.getCapacityLabel()} @ ${this.availabilityPercent}%)`;
     }
 
     getTypeIcon() {
@@ -2527,8 +2569,11 @@ function createTaskElement(task, objectiveId, tacticId, initiativeId) {
         task.resourceAssignments.forEach(assignment => {
             const resource = systemicState.getResource(assignment.resourceId);
             if (resource) {
+                const unitDisplay = resource.unit === 'dollars' ? `${assignment.hoursPerDay}/d` :
+                                   resource.unit === 'hours' ? `${assignment.hoursPerDay}h/d` :
+                                   `${assignment.hoursPerDay}${resource.getUnitLabel()}/d`;
                 resourceBadges += `<span style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px;">
-                    ${resource.getTypeIcon()} ${resource.name} (${assignment.hoursPerDay}h/d)
+                    ${resource.getTypeIcon()} ${resource.name} (${unitDisplay})
                 </span>`;
             }
         });
@@ -2792,15 +2837,22 @@ function showAddTaskForm(objectiveId, tacticId, initiativeId) {
         resourceCheckboxes = '<p style="color: #999; font-size: 12px;">No resources available. Add resources first.</p>';
     } else {
         systemicState.resources.forEach(r => {
+            const unitLabel = r.getUnitLabel();
+            const placeholder = r.unit === 'dollars' ? '$/day' :
+                               r.unit === 'hours' ? 'hrs/day' : `${unitLabel}/day`;
+            const defaultValue = r.unit === 'dollars' ? '100' :
+                                r.unit === 'hours' ? '8' : '1';
+
             resourceCheckboxes += `
                 <div style="margin-bottom: 8px; padding: 6px; background: #f9f9f9; border-radius: 4px;">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}">
+                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}" data-unit="${r.unit}">
                         <span>${r.getTypeIcon()} ${r.name}</span>
                         <input type="number" class="resource-hours" data-resource="${r.id}"
-                               placeholder="hrs/day" min="1" max="24" value="8"
-                               style="width: 70px; margin-left: auto; padding: 4px; font-size: 12px;"
+                               placeholder="${placeholder}" min="0.01" step="0.01" value="${defaultValue}"
+                               style="width: 80px; margin-left: auto; padding: 4px; font-size: 12px;"
                                disabled>
+                        <span style="font-size: 10px; color: #666; min-width: 40px;">${placeholder}</span>
                     </label>
                 </div>
             `;
@@ -2824,7 +2876,7 @@ function showAddTaskForm(objectiveId, tacticId, initiativeId) {
                 ${resourceCheckboxes}
             </div>
             <p style="font-size: 11px; color: #666; margin-top: 5px;">
-                💡 Check resources and set hours/day for each. Tasks can use multiple resources simultaneously.
+                💡 Check resources and set amount per day for each. Tasks can use multiple resources simultaneously.
             </p>
         </div>
         <div class="form-actions">
@@ -3166,18 +3218,24 @@ function editTask(objectiveId, tacticId, initiativeId, taskId) {
         systemicState.resources.forEach(r => {
             const assignment = task.resourceAssignments.find(ra => ra.resourceId === r.id);
             const isChecked = assignment ? 'checked' : '';
-            const hoursValue = assignment ? assignment.hoursPerDay : 8;
+            const unitLabel = r.getUnitLabel();
+            const placeholder = r.unit === 'dollars' ? '$/day' :
+                               r.unit === 'hours' ? 'hrs/day' : `${unitLabel}/day`;
+            const defaultValue = r.unit === 'dollars' ? '100' :
+                                r.unit === 'hours' ? '8' : '1';
+            const hoursValue = assignment ? assignment.hoursPerDay : defaultValue;
             const hoursDisabled = assignment ? '' : 'disabled';
 
             resourceCheckboxes += `
                 <div style="margin-bottom: 8px; padding: 6px; background: #f9f9f9; border-radius: 4px;">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}" ${isChecked}>
+                        <input type="checkbox" class="resource-checkbox" value="${r.id}" data-name="${r.name}" data-unit="${r.unit}" ${isChecked}>
                         <span>${r.getTypeIcon()} ${r.name}</span>
                         <input type="number" class="resource-hours" data-resource="${r.id}"
-                               placeholder="hrs/day" min="1" max="24" value="${hoursValue}"
-                               style="width: 70px; margin-left: auto; padding: 4px; font-size: 12px;"
+                               placeholder="${placeholder}" min="0.01" step="0.01" value="${hoursValue}"
+                               style="width: 80px; margin-left: auto; padding: 4px; font-size: 12px;"
                                ${hoursDisabled}>
+                        <span style="font-size: 10px; color: #666; min-width: 40px;">${placeholder}</span>
                     </label>
                 </div>
             `;
@@ -3201,7 +3259,7 @@ function editTask(objectiveId, tacticId, initiativeId, taskId) {
                 ${resourceCheckboxes}
             </div>
             <p style="font-size: 11px; color: #666; margin-top: 5px;">
-                💡 Check resources and set hours/day for each. Tasks can use multiple resources simultaneously.
+                💡 Check resources and set amount per day for each. Tasks can use multiple resources simultaneously.
             </p>
         </div>
         <div class="form-group">
@@ -3316,7 +3374,7 @@ function showAddResourceForm() {
         </div>
         <div class="form-group">
             <label>Type:</label>
-            <select id="resourceType">
+            <select id="resourceType" onchange="updateResourceFormFields()">
                 <option value="person">👤 Person</option>
                 <option value="skill_pool">👥 Skill Pool / Role</option>
                 <option value="decision_maker">👔 Decision Maker</option>
@@ -3324,6 +3382,23 @@ function showAddResourceForm() {
                 <option value="space">📍 Space / Location</option>
                 <option value="financial">💰 Financial / Budget</option>
                 <option value="supplier">🏭 Supplier</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Unit of Measurement:</label>
+            <select id="resourceUnit" onchange="updateResourceFormFields()">
+                <option value="hours">Hours</option>
+                <option value="dollars">Dollars ($)</option>
+                <option value="units">Generic Units</option>
+            </select>
+        </div>
+        <div class="form-group" id="periodGroup" style="display: none;">
+            <label>Budget Period:</label>
+            <select id="resourcePeriod">
+                <option value="daily">Daily</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
             </select>
         </div>
         <div class="form-group">
@@ -3340,8 +3415,11 @@ function showAddResourceForm() {
             <small style="color: #666;">70-80% recommended for realistic planning</small>
         </div>
         <div class="form-group">
-            <label>Max Hours/Day:</label>
-            <input type="number" id="resourceMaxPerDay" min="1" max="24" value="8">
+            <label id="maxPerDayLabel">Max Hours/Day:</label>
+            <input type="number" id="resourceMaxPerDay" min="1" value="8" step="0.01">
+            <small id="maxPerDayHelp" style="color: #666; display: block; margin-top: 4px;">
+                For people: typical work hours per day
+            </small>
         </div>
         <div class="form-group">
             <label>Role/Title (optional):</label>
@@ -3366,6 +3444,49 @@ function showAddResourceForm() {
     `;
 
     modal.style.display = 'block';
+    updateResourceFormFields(); // Initialize form state
+}
+
+function updateResourceFormFields() {
+    const type = document.getElementById('resourceType')?.value;
+    const unit = document.getElementById('resourceUnit');
+    const periodGroup = document.getElementById('periodGroup');
+    const maxPerDayLabel = document.getElementById('maxPerDayLabel');
+    const maxPerDayInput = document.getElementById('resourceMaxPerDay');
+    const maxPerDayHelp = document.getElementById('maxPerDayHelp');
+
+    if (!unit) return;
+
+    // Auto-select unit based on type
+    if (type === 'financial') {
+        unit.value = 'dollars';
+        periodGroup.style.display = 'block';
+        maxPerDayLabel.textContent = 'Budget Amount:';
+        maxPerDayInput.step = '0.01';
+        maxPerDayInput.value = '10000';
+        maxPerDayHelp.textContent = 'Total budget available per period';
+    } else if (type === 'space') {
+        unit.value = 'units';
+        periodGroup.style.display = 'none';
+        maxPerDayLabel.textContent = 'Max Units/Day:';
+        maxPerDayInput.step = '1';
+        maxPerDayInput.value = '1';
+        maxPerDayHelp.textContent = 'Maximum units available (e.g., seats, square feet)';
+    } else {
+        unit.value = 'hours';
+        periodGroup.style.display = 'none';
+        maxPerDayLabel.textContent = 'Max Hours/Day:';
+        maxPerDayInput.step = '0.5';
+        maxPerDayInput.value = '8';
+        maxPerDayHelp.textContent = 'For people: typical work hours per day';
+    }
+
+    // Show/hide period selector for dollars
+    if (unit.value === 'dollars') {
+        periodGroup.style.display = 'block';
+    } else {
+        periodGroup.style.display = 'none';
+    }
 }
 
 function saveResource() {
@@ -3378,10 +3499,12 @@ function saveResource() {
     const type = document.getElementById('resourceType').value;
     const resource = systemicState.addResource(name, type);
 
+    resource.unit = document.getElementById('resourceUnit').value;
+    resource.capacityPeriod = document.getElementById('resourcePeriod')?.value || 'daily';
     resource.capacity = parseFloat(document.getElementById('resourceCapacity').value);
     resource.availabilityPercent = parseInt(document.getElementById('resourceAvailability').value);
     resource.loadLimitPercent = parseInt(document.getElementById('resourceLoadLimit').value);
-    resource.maxCapacityPerDay = parseInt(document.getElementById('resourceMaxPerDay').value);
+    resource.maxCapacityPerDay = parseFloat(document.getElementById('resourceMaxPerDay').value);
     resource.role = document.getElementById('resourceRole').value.trim();
     resource.isDrumResource = document.getElementById('resourceIsDrum').checked;
     resource.isSharedAcrossProjects = document.getElementById('resourceIsShared').checked;
@@ -3447,7 +3570,7 @@ function renderResourceList() {
                             ${badges.join('')}
                         </div>
                         <div style="font-size:10px;color:#666;margin-top:2px;">
-                            ${r.capacity} × ${r.availabilityPercent}% × ${r.loadLimitPercent}% = ${effectiveCapacity} effective
+                            ${r.getCapacityLabel()} @ ${r.availabilityPercent}% avail. × ${r.loadLimitPercent}% load limit
                             ${r.role ? ' | ' + r.role : ''}
                         </div>
                     </div>
@@ -4075,13 +4198,17 @@ function drawResourceLoad() {
     // Prepare data
     const resourceData = [];
     systemicState.resources.forEach(resource => {
-        const load = resourceLoads.get(resource.id) || { utilizationPercent: 0, totalDays: 0 };
+        const load = resourceLoads.get(resource.id) || { utilizationPercent: 0, totalDays: 0, totalHours: 0 };
         resourceData.push({
             name: resource.name,
             icon: resource.getTypeIcon(),
             utilization: Math.min(100, load.utilizationPercent),
             totalDays: load.totalDays,
+            totalAmount: load.totalHours || 0,
             capacity: resource.getEffectiveCapacity() * 90, // 90-day window
+            capacityLabel: resource.getCapacityLabel(),
+            unit: resource.unit,
+            unitLabel: resource.getUnitLabel(),
             isDrum: resource.isDrumResource
         });
     });
@@ -4103,7 +4230,12 @@ function drawResourceLoad() {
         ctx.font = '13px Arial';
         ctx.textAlign = 'right';
         const label = `${data.icon} ${data.name}`;
-        ctx.fillText(label, leftMargin - 10, y + barHeight / 2 + 5);
+        ctx.fillText(label, leftMargin - 10, y + barHeight / 2 - 2);
+
+        // Capacity sublabel
+        ctx.fillStyle = '#666';
+        ctx.font = '10px Arial';
+        ctx.fillText(`(${data.capacityLabel})`, leftMargin - 10, y + barHeight / 2 + 10);
 
         // Bar background
         ctx.fillStyle = '#e0e0e0';
