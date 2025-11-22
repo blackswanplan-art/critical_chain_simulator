@@ -3114,28 +3114,179 @@ function updateStats() {
 }
 
 function loadExamplePlan() {
-    // Example systemic plan
+    if (systemicState.objectives.length > 0 || systemicState.resources.length > 0) {
+        if (!confirm('⚠️ This will clear your current plan and load a comprehensive demo.\n\nThe demo includes:\n• 11 resources (people, budgets, space)\n• 2 objectives with strategic goals\n• Multiple tactics and initiatives\n• 15+ tasks with resource assignments\n• Task dependencies for CCPM\n\nContinue?')) {
+            return;
+        }
+    }
+
+    // Start fresh
     systemicState = new SystemicProjectState();
-    systemicState.projectName = "Company Growth Strategy 2024-2027";
+    systemicState.projectName = "Exit Planning Firm - Growth & Product Launch 2024-2026";
 
-    // Objective 1
-    const obj1 = systemicState.addObjective("Expand Market Share", 2024, 2027);
-    const tac1 = systemicState.addTactic("Launch New Product Line", "2024-Q1", "2025-Q4", obj1.id);
-    const init1 = systemicState.addInitiative("Develop MVP", "2024-Q1", 2, obj1.id, tac1.id);
-    systemicState.addTask("Market Research", 30, obj1.id, tac1.id, init1.id);
-    systemicState.addTask("Design Prototype", 45, obj1.id, tac1.id, init1.id);
+    // Step 1: Load resources (people, budgets, space)
+    console.log('Loading resources...');
+    systemicState.loadCommonResources();
 
-    // Objective 2
-    const obj2 = systemicState.addObjective("Improve Operational Efficiency", 2024, 2026);
-    const tac2 = systemicState.addTactic("Implement Automation", "2024-Q2", "2025-Q2", obj2.id);
-    const init2 = systemicState.addInitiative("Deploy AI Tools", "2024-Q2", 3, obj2.id, tac2.id);
-    systemicState.addTask("Evaluate Vendors", 20, obj2.id, tac2.id, init2.id);
-    systemicState.addTask("Pilot Program", 60, obj2.id, tac2.id, init2.id);
+    // Get resource references for task assignments
+    const owner = systemicState.resources.find(r => r.name === 'Owner / CEO');
+    const cfo = systemicState.resources.find(r => r.name === 'Fractional CFO');
+    const planner = systemicState.resources.find(r => r.name === 'Exit Planner');
+    const designer = systemicState.resources.find(r => r.name === 'Designer / Engineer');
+    const sme = systemicState.resources.find(r => r.name === 'SME (Subject Matter Expert)');
+    const operator = systemicState.resources.find(r => r.name === 'Operator');
+    const committee = systemicState.resources.find(r => r.name === 'Investment Committee');
+    const opexBudget = systemicState.resources.find(r => r.name === 'Monthly OpEx Budget');
+    const capBudget = systemicState.resources.find(r => r.name === 'Q1 Capital Budget');
+    const confRoom = systemicState.resources.find(r => r.name === 'Conference Room A');
 
+    // Step 2: Create strategic objectives
+    console.log('Creating objectives...');
+
+    // OBJECTIVE 1: Launch Exit Planning Software Platform
+    const obj1 = systemicState.addObjective("Launch Exit Planning Software Platform", 2024, 2025);
+    obj1.description = "Develop and launch a proprietary software platform for exit planning";
+
+    // Tactic 1.1: Product Development
+    const tac1_1 = systemicState.addTactic("Product Development & Beta Launch", "2024-Q1", "2024-Q4", obj1.id);
+
+    // Initiative 1.1.1: Requirements & Design
+    const init1_1_1 = systemicState.addInitiative("Requirements & UX Design", "2024-Q1", 2, obj1.id, tac1_1.id);
+
+    const task1 = systemicState.addTask("Market & Competitor Research", 15, obj1.id, tac1_1.id, init1_1_1.id);
+    task1.addResource(planner.id, 6, 'primary');
+    task1.addResource(sme.id, 4, 'support');
+    task1.addResource(opexBudget.id, 500, 'budget');
+
+    const task2 = systemicState.addTask("User Story Mapping Workshop", 5, obj1.id, tac1_1.id, init1_1_1.id);
+    task2.addResource(planner.id, 8, 'primary');
+    task2.addResource(owner.id, 4, 'stakeholder');
+    task2.addResource(confRoom.id, 1, 'facility');
+    task2.predecessors = [task1.id]; // Depends on research
+
+    const task3 = systemicState.addTask("UX/UI Design & Prototyping", 20, obj1.id, tac1_1.id, init1_1_1.id);
+    task3.addResource(designer.id, 8, 'primary');
+    task3.addResource(planner.id, 2, 'review');
+    task3.addResource(opexBudget.id, 800, 'budget');
+    task3.predecessors = [task2.id]; // Depends on user stories
+
+    // Initiative 1.1.2: Software Development
+    const init1_1_2 = systemicState.addInitiative("MVP Development", "2024-Q2", 3, obj1.id, tac1_1.id);
+
+    const task4 = systemicState.addTask("Backend Architecture & API", 30, obj1.id, tac1_1.id, init1_1_2.id);
+    task4.addResource(designer.id, 8, 'primary');
+    task4.addResource(capBudget.id, 5000, 'infrastructure');
+    task4.predecessors = [task3.id]; // Depends on design
+
+    const task5 = systemicState.addTask("Frontend Development", 25, obj1.id, tac1_1.id, init1_1_2.id);
+    task5.addResource(designer.id, 8, 'primary');
+    task5.predecessors = [task4.id]; // Depends on backend (serial)
+
+    const task6 = systemicState.addTask("Integration & Testing", 20, obj1.id, tac1_1.id, init1_1_2.id);
+    task6.addResource(designer.id, 6, 'primary');
+    task6.addResource(planner.id, 4, 'qa');
+    task6.predecessors = [task5.id]; // Depends on frontend
+
+    // Initiative 1.1.3: Beta Launch
+    const init1_1_3 = systemicState.addInitiative("Beta Testing & Iteration", "2024-Q3", 2, obj1.id, tac1_1.id);
+
+    const task7 = systemicState.addTask("Beta User Recruitment", 10, obj1.id, tac1_1.id, init1_1_3.id);
+    task7.addResource(planner.id, 4, 'primary');
+    task7.addResource(operator.id, 4, 'outreach');
+    task7.addResource(opexBudget.id, 1000, 'marketing');
+    task7.predecessors = [task6.id]; // Depends on testing completion
+
+    const task8 = systemicState.addTask("Beta Testing Period", 30, obj1.id, tac1_1.id, init1_1_3.id);
+    task8.addResource(planner.id, 4, 'support');
+    task8.addResource(designer.id, 4, 'fixes');
+    task8.predecessors = [task7.id]; // Depends on user recruitment
+
+    // OBJECTIVE 2: Scale Advisory Services
+    const obj2 = systemicState.addObjective("Scale Advisory Services to 50 Clients", 2024, 2026);
+    obj2.description = "Grow client base while maintaining service quality";
+
+    // Tactic 2.1: Process Standardization
+    const tac2_1 = systemicState.addTactic("Standardize & Document Service Delivery", "2024-Q2", "2024-Q4", obj2.id);
+
+    // Initiative 2.1.1: Playbook Creation
+    const init2_1_1 = systemicState.addInitiative("Create Service Playbooks", "2024-Q2", 2, obj2.id, tac2_1.id);
+
+    const task9 = systemicState.addTask("Document Current Processes", 15, obj2.id, tac2_1.id, init2_1_1.id);
+    task9.addResource(planner.id, 6, 'primary');
+    task9.addResource(sme.id, 4, 'expert');
+
+    const task10 = systemicState.addTask("Create Templates & Tools", 20, obj2.id, tac2_1.id, init2_1_1.id);
+    task10.addResource(planner.id, 6, 'primary');
+    task10.addResource(designer.id, 2, 'design');
+    task10.predecessors = [task9.id]; // Sequential dependency
+
+    // Tactic 2.2: Team Training
+    const tac2_2 = systemicState.addTactic("Train & Onboard New Team Members", "2024-Q3", "2025-Q1", obj2.id);
+
+    const init2_2_1 = systemicState.addInitiative("Hire & Train Associates", "2024-Q3", 3, obj2.id, tac2_2.id);
+
+    const task11 = systemicState.addTask("Hiring Process & Interviews", 30, obj2.id, tac2_2.id, init2_2_1.id);
+    task11.addResource(owner.id, 4, 'interviewer');
+    task11.addResource(cfo.id, 2, 'comp review');
+    task11.addResource(opexBudget.id, 2000, 'recruiting');
+    task11.predecessors = [task10.id]; // Need playbooks first
+
+    const task12 = systemicState.addTask("Onboarding & Training Program", 45, obj2.id, tac2_2.id, init2_2_1.id);
+    task12.addResource(planner.id, 4, 'trainer');
+    task12.addResource(sme.id, 4, 'content expert');
+    task12.addResource(confRoom.id, 1, 'training room');
+    task12.predecessors = [task11.id]; // After hiring
+
+    // Tactic 2.3: Client Acquisition
+    const tac2_3 = systemicState.addTactic("Marketing & Lead Generation Campaign", "2024-Q3", "2025-Q2", obj2.id);
+
+    const init2_3_1 = systemicState.addInitiative("Digital Marketing Launch", "2024-Q3", 3, obj2.id, tac2_3.id);
+
+    const task13 = systemicState.addTask("Content Strategy & SEO", 20, obj2.id, tac2_3.id, init2_3_1.id);
+    task13.addResource(operator.id, 6, 'marketing');
+    task13.addResource(opexBudget.id, 1500, 'content');
+
+    const task14 = systemicState.addTask("Webinar Series Production", 30, obj2.id, tac2_3.id, init2_3_1.id);
+    task14.addResource(planner.id, 4, 'presenter');
+    task14.addResource(operator.id, 4, 'production');
+    task14.addResource(opexBudget.id, 2000, 'platform');
+    task14.predecessors = [task13.id]; // Build on content
+
+    const task15 = systemicState.addTask("Strategic Partnership Development", 25, obj2.id, tac2_3.id, init2_3_1.id);
+    task15.addResource(owner.id, 6, 'business dev');
+    task15.addResource(cfo.id, 2, 'deal review');
+
+    // Governance check
+    const task16 = systemicState.addTask("Investment Committee Approval", 5, obj1.id, tac1_1.id, init1_1_2.id);
+    task16.addResource(committee.id, 4, 'decision');
+    task16.addResource(owner.id, 4, 'presenter');
+    task16.addResource(cfo.id, 2, 'financial');
+    task16.addResource(confRoom.id, 1, 'meeting');
+    task16.predecessors = [task3.id]; // After design, before dev starts
+
+    // Make task4 depend on approval
+    task4.predecessors.push(task16.id);
+
+    console.log('Plan created with objectives, tactics, initiatives, and tasks with dependencies');
+
+    // Step 3: Auto-render everything
     renderHierarchy();
     renderResourceList();
     renderCanvas();
     updateStats();
+
+    // Step 4: Auto-schedule with CCPM
+    console.log('Auto-scheduling project with CCPM...');
+    setTimeout(() => {
+        try {
+            scheduleProject();
+            alert('✅ Demo Plan Loaded Successfully!\n\n📊 Project: Exit Planning Firm Growth Strategy\n📋 2 Objectives, 6 Tactics, 8 Initiatives, 16 Tasks\n👥 11 Resources (people, budgets, space)\n🔗 Task dependencies configured\n⚡ CCPM scheduling complete\n\n🎯 Explore:\n• Timeline view: See strategic plan\n• Resource Load: Check utilization\n• Buffers: Monitor project/feeding buffers\n• Calendar: Resource allocation over time\n• Priority Queue: "What\'s my next task?"\n\n💡 Try changing time scales (Week, 30d, 90d, 180d, 1yr, 3yr)');
+        } catch (err) {
+            console.error('Scheduling error:', err);
+            alert('✅ Demo Plan Loaded!\n\nNote: Auto-scheduling encountered an issue. You can manually schedule by clicking "⚡ Schedule Project (CCPM)" in the header.');
+        }
+    }, 500);
+
     saveToLocalStorage();
 }
 
