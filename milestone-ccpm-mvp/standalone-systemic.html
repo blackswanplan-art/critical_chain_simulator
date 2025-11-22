@@ -2075,29 +2075,40 @@ class SystemicProjectState {
     // Create common resource templates
     loadCommonResources() {
         const templates = [
-            { name: 'Owner / CEO', type: 'decision_maker', role: 'Owner', capacity: 1, availability: 60, loadLimit: 70, isDrum: true },
-            { name: 'Investment Committee', type: 'decision_maker', role: 'Committee', capacity: 1, availability: 40, loadLimit: 60 },
-            { name: 'Fractional CFO', type: 'person', role: 'CFO', capacity: 1, availability: 50, loadLimit: 75, isShared: true },
-            { name: 'Exit Planner', type: 'person', role: 'Planner', capacity: 1, availability: 80, loadLimit: 75, isShared: true },
-            { name: 'Designer / Engineer', type: 'skill_pool', role: 'Designer', capacity: 2, availability: 80, loadLimit: 75 },
-            { name: 'SME (Subject Matter Expert)', type: 'skill_pool', role: 'SME', capacity: 1, availability: 70, loadLimit: 70 },
-            { name: 'Operator', type: 'skill_pool', role: 'Operator', capacity: 3, availability: 80, loadLimit: 80 },
-            { name: 'Conference Room A', type: 'space', location: 'Main Building', capacity: 1, maxPerDay: 10 },
-            { name: 'Workshop Bay 1', type: 'space', location: 'Workshop', capacity: 1, maxPerDay: 16 },
-            { name: 'Monthly OpEx Budget', type: 'financial', budgetLimit: 50000, capacity: 1 }
+            { name: 'Owner / CEO', type: 'decision_maker', role: 'Owner', capacity: 1, availability: 60, loadLimit: 70, maxPerDay: 8, isDrum: true },
+            { name: 'Investment Committee', type: 'decision_maker', role: 'Committee', capacity: 1, availability: 40, loadLimit: 60, maxPerDay: 8 },
+            { name: 'Fractional CFO', type: 'person', role: 'CFO', capacity: 1, availability: 50, loadLimit: 75, maxPerDay: 8, isShared: true },
+            { name: 'Exit Planner', type: 'person', role: 'Planner', capacity: 1, availability: 80, loadLimit: 75, maxPerDay: 8, isShared: true },
+            { name: 'Designer / Engineer', type: 'skill_pool', role: 'Designer', capacity: 2, availability: 80, loadLimit: 75, maxPerDay: 8 },
+            { name: 'SME (Subject Matter Expert)', type: 'skill_pool', role: 'SME', capacity: 1, availability: 70, loadLimit: 70, maxPerDay: 8 },
+            { name: 'Operator', type: 'skill_pool', role: 'Operator', capacity: 3, availability: 80, loadLimit: 80, maxPerDay: 8 },
+            { name: 'Conference Room A', type: 'space', location: 'Main Building', capacity: 1, maxPerDay: 1, unit: 'units' },
+            { name: 'Workshop Bay 1', type: 'space', location: 'Workshop', capacity: 1, maxPerDay: 1, unit: 'units' },
+            { name: 'Monthly OpEx Budget', type: 'financial', role: 'Operating Budget', capacity: 1, availability: 80, loadLimit: 75, maxPerDay: 50000, unit: 'dollars', period: 'monthly' },
+            { name: 'Q1 Capital Budget', type: 'financial', role: 'Capital Projects', capacity: 1, availability: 100, loadLimit: 80, maxPerDay: 150000, unit: 'dollars', period: 'quarterly' }
         ];
 
         templates.forEach(t => {
             const resource = this.addResource(t.name, t.type);
+
+            // Set unit first (important for proper initialization)
+            if (t.unit) {
+                resource.unit = t.unit;
+            }
+            if (t.period) {
+                resource.capacityPeriod = t.period;
+            }
+
+            // Then set other properties
             resource.role = t.role || '';
-            resource.capacity = t.capacity;
-            resource.availabilityPercent = t.availability;
-            resource.loadLimitPercent = t.loadLimit;
+            resource.capacity = t.capacity || 1;
+            resource.availabilityPercent = t.availability || 80;
+            resource.loadLimitPercent = t.loadLimit || 75;
+            resource.maxCapacityPerDay = t.maxPerDay || 8;
             resource.isDrumResource = t.isDrum || false;
             resource.isSharedAcrossProjects = t.isShared || false;
             resource.location = t.location || '';
             resource.budgetLimit = t.budgetLimit || 0;
-            resource.maxCapacityPerDay = t.maxPerDay || 8;
         });
     }
 
