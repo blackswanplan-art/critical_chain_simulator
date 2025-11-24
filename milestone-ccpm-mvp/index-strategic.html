@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Systemic Planning Edition v3.0 - Critical Chain Simulator</title>
+    <title>SPEC - Systemic Planning & Execution Conductor</title>
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; overflow: hidden; }
@@ -72,7 +72,7 @@ header p { font-size: 12px; opacity: 0.9; }
 
 /* Modal */
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-.modal-content { background: white; margin: 5% auto; padding: 25px; border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+.modal-content { background: white; margin: 5% auto; padding: 25px; border-radius: 8px; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; }
 .modal-content h2 { margin-bottom: 15px; color: #667eea; font-size: 18px; }
 .form-subtitle { font-size: 12px; color: #666; margin-bottom: 15px; }
 .form-group { margin-bottom: 15px; }
@@ -102,8 +102,19 @@ header p { font-size: 12px; opacity: 0.9; }
 <body>
     <div class="container">
         <header>
-            <h1>📊 Systemic Planning Edition v3.0</h1>
-            <p>Hierarchical Planning: Objectives → Tactics/Boulders → Initiatives/Rocks → Tasks/To-Dos</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div>
+                    <h1>📊 SPEC - Systemic Planning & Execution Conductor</h1>
+                    <p>Powered by spec - Strategy, Priorities, Execution & Capacity</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 11px; color: rgba(255,255,255,0.8);">Project:</label>
+                    <input type="text" id="projectNameInput"
+                           style="padding: 4px 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 4px; font-size: 12px; width: 250px;"
+                           placeholder="Project Name"
+                           onchange="updateProjectName(this.value)">
+                </div>
+            </div>
             <div class="header-controls">
                 <button onclick="scheduleProject()" style="background: rgba(76, 175, 80, 0.3); font-weight: bold;">⚡ Schedule Project (CCPM)</button>
                 <button onclick="exportToJSON()">💾 Export</button>

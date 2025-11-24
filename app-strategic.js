@@ -806,8 +806,10 @@ window.addEventListener('load', () => {
     loadFromLocalStorage();
     startAutoSave();
     renderHierarchy();
+    renderResourceList(); // Always show Load Common Resources button
     renderCanvas();
     updateStats();
+    updateProjectNameInput(); // Populate project name field
 });
 
 function resizeCanvas() {
@@ -816,6 +818,18 @@ function resizeCanvas() {
     canvas.width = wrapper.clientWidth;
     canvas.height = wrapper.clientHeight;
     renderCanvas();
+}
+
+function updateProjectName(name) {
+    systemicState.projectName = name;
+    saveToLocalStorage();
+}
+
+function updateProjectNameInput() {
+    const input = document.getElementById('projectNameInput');
+    if (input) {
+        input.value = systemicState.projectName;
+    }
 }
 
 // ===== PERSISTENCE =====
@@ -2580,8 +2594,12 @@ function setTimeScale(days) {
     // Update time scale button states
     document.querySelectorAll('.time-scale-btn').forEach(btn => {
         btn.classList.remove('active');
+        // Check the onclick attribute to find matching button
+        const onclickValue = btn.getAttribute('onclick');
+        if (onclickValue && onclickValue.includes(`(${days})`)) {
+            btn.classList.add('active');
+        }
     });
-    event.target.classList.add('active');
 
     // Re-render canvas with new time scale
     renderCanvas();
@@ -3274,6 +3292,7 @@ function loadExamplePlan() {
     renderResourceList();
     renderCanvas();
     updateStats();
+    updateProjectNameInput(); // Update project name field
 
     // Step 4: Auto-schedule with CCPM
     console.log('Auto-scheduling project with CCPM...');
@@ -3291,6 +3310,74 @@ function loadExamplePlan() {
 }
 
 // ===== CCPM SCHEDULING =====
+
+function showScheduleResultsModal(projectDuration, projectBufferSize, ccLength, ccTitles, feedingCount, bufferCount, bufferSummary) {
+    const modal = document.getElementById('editModal');
+    const content = document.getElementById('editModalContent');
+
+    content.innerHTML = `
+        <h2 style="color: #4caf50; margin-bottom: 20px;">✅ Project Scheduled with CCPM Buffers!</h2>
+
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <h3 style="color: #667eea; font-size: 16px; margin-bottom: 10px;">📊 PROJECT SCHEDULE</h3>
+            <div style="font-size: 13px; line-height: 1.8;">
+                <strong>Duration:</strong> ${projectDuration} days (tasks only)<br>
+                <strong>With Buffers:</strong> ${projectDuration + projectBufferSize} days
+            </div>
+        </div>
+
+        <div style="background: #ffebee; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <h3 style="color: #f44336; font-size: 16px; margin-bottom: 10px;">🔴 CRITICAL CHAIN</h3>
+            <div style="font-size: 13px; line-height: 1.8;">
+                <strong>${ccLength} tasks:</strong><br>
+                <div style="max-height: 100px; overflow-y: auto; margin-top: 5px; padding: 5px; background: white; border-radius: 4px;">
+                    ${ccTitles}
+                </div>
+            </div>
+        </div>
+
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <h3 style="color: #2196f3; font-size: 16px; margin-bottom: 10px;">🔵 FEEDING CHAINS</h3>
+            <div style="font-size: 13px;">
+                <strong>${feedingCount}</strong> feeding chains identified
+            </div>
+        </div>
+
+        <div style="background: #f1f8e9; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <h3 style="color: #689f38; font-size: 16px; margin-bottom: 10px;">🛡️ BUFFERS CREATED</h3>
+            <div style="font-size: 13px; line-height: 1.8;">
+                <strong>${bufferCount} total buffers:</strong><br>
+                • <strong>Project Buffer:</strong> ${bufferSummary.byType.project} (protects completion date)<br>
+                • <strong>Feeding Buffers:</strong> ${bufferSummary.byType.feeding} (protect from feeding chain delays)<br>
+                • <strong>Resource Buffers:</strong> ${bufferSummary.byType.resource} (alert before constrained resources)<br>
+                • <strong>Drum Buffers:</strong> ${bufferSummary.byType.drum} (protect constraint resource)
+            </div>
+        </div>
+
+        <div style="background: #fff3e0; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <h3 style="color: #f57c00; font-size: 16px; margin-bottom: 10px;">✅ COMPLETED ACTIONS</h3>
+            <div style="font-size: 13px; line-height: 1.8;">
+                ✓ All tasks scheduled with late-start optimization<br>
+                ✓ Critical chain tasks marked in red<br>
+                ✓ Buffers sized at 50% of aggregated safety time<br>
+                ✓ Priority queue created for all resources
+            </div>
+        </div>
+
+        <div style="background: #e8eaf6; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+            <h3 style="color: #5e35b1; font-size: 16px; margin-bottom: 10px;">🎯 NEXT STEPS</h3>
+            <div style="font-size: 13px;">
+                View the <strong>Priority Queue</strong> tab to see "What's My Next Task?" for each resource
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button onclick="closeModal()" class="btn btn-primary" style="width: 100%;">Close</button>
+        </div>
+    `;
+
+    modal.style.display = 'block';
+}
 
 function scheduleProject() {
     // Run CCPM scheduling algorithm
@@ -3342,32 +3429,19 @@ function scheduleProject() {
         // Get buffer summary
         const bufferSummary = bufferManager.getBufferStatusSummary();
 
-        // Show summary
+        // Show summary in modal
         const criticalChainTaskTitles = result.criticalChain.map(t => t.title).join(', ');
+        const projectBufferSize = buffers.find(b => b.type === 'project')?.size || 0;
 
-        alert(`✅ Project Scheduled with CCPM Buffers!
-
-📊 PROJECT SCHEDULE:
-Duration: ${result.projectDuration} days (tasks only)
-With Buffers: ${result.projectDuration + (buffers.find(b => b.type === 'project')?.size || 0)} days
-
-🔴 CRITICAL CHAIN: ${result.criticalChain.length} tasks
-${criticalChainTaskTitles}
-
-🔵 FEEDING CHAINS: ${result.feedingChains.length}
-
-🛡️ BUFFERS CREATED: ${buffers.length} total
-  • Project Buffer: ${bufferSummary.byType.project} (protects completion date)
-  • Feeding Buffers: ${bufferSummary.byType.feeding} (protect from feeding chain delays)
-  • Resource Buffers: ${bufferSummary.byType.resource} (alert before constrained resources)
-  • Drum Buffers: ${bufferSummary.byType.drum} (protect constraint resource)
-
-✅ All tasks scheduled with late-start optimization
-✅ Critical chain tasks marked in red
-✅ Buffers sized at 50% of aggregated safety time
-✅ Priority queue created for all resources
-
-🎯 View Priority Queue tab to see "What's My Next Task?" for each resource.`);
+        showScheduleResultsModal(
+            result.projectDuration,
+            projectBufferSize,
+            result.criticalChain.length,
+            criticalChainTaskTitles,
+            result.feedingChains.length,
+            buffers.length,
+            bufferSummary
+        );
 
         // Re-render everything
         renderHierarchy();
@@ -3421,4 +3495,6 @@ window.closeModal = closeModal;
 window.loadExamplePlan = loadExamplePlan;
 window.clearAll = clearAll;
 window.switchView = switchView;
+window.setTimeScale = setTimeScale;
 window.scheduleProject = scheduleProject;
+window.updateProjectName = updateProjectName;
